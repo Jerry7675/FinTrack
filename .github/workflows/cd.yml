@@ -1,0 +1,30 @@
+name: CD
+
+on:
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: EAS update channel
+        required: true
+        default: preview
+        type: string
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Publish EAS update
+        run: bunx eas-cli update --channel "${{ inputs.channel }}" --non-interactive
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}

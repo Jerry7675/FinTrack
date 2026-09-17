@@ -1,0 +1,42 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.14/schema.json",
+  "files": {
+    "includes": [
+      "**",
+      "!!node_modules",
+      "!!.expo",
+      "!!dist",
+      "!!build",
+      "!!graphify-out",
+      "!!assets/expo.icon/Assets"
+    ]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineEnding": "lf",
+    "lineWidth": 80
+  },
+  "javascript": {
+    "formatter": {
+      "arrowParentheses": "always",
+      "jsxQuoteStyle": "single",
+      "quoteProperties": "asNeeded",
+      "quoteStyle": "single",
+      "semicolons": "always",
+      "trailingCommas": "es5"
+    }
+  },
+  "css": {
+    "linter": {
+      "enabled": false
+    }
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended"
+    }
+  }
+}
