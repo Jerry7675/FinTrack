@@ -1,0 +1,5 @@
+import { DashboardScreen } from '@/features/dashboard/screen';
+
+export default function HomeRoute() {
+  return <DashboardScreen />;
+}

@@ -7,12 +7,20 @@
     "icon": "./assets/images/icon.png",
     "scheme": "fintrack",
     "userInterfaceStyle": "automatic",
+    "androidStatusBar": {
+      "barStyle": "dark-content",
+      "backgroundColor": "#F4F7F5",
+      "translucent": true
+    },
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/expo.icon",
+      "bundleIdentifier": "com.fintrack.app",
+      "supportsTablet": true
     },
     "android": {
+      "package": "com.fintrack.app",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#0A0A0A",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
@@ -21,6 +29,7 @@
     },
     "web": {
       "output": "static",
+      "bundler": "metro",
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
@@ -28,9 +37,48 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#208AEF",
+          "backgroundColor": "#0A0A0A",
           "image": "./assets/images/splash-icon.png",
-          "imageWidth": 76
+          "imageWidth": 180,
+          "resizeMode": "contain",
+          "dark": {
+            "backgroundColor": "#0A0A0A",
+            "image": "./assets/images/splash-icon.png"
+          }
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow FinTrack to attach receipt and profile photos."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/splash-icon.png",
+          "color": "#1A7A4C",
+          "defaultChannel": "reminders"
+        }
+      ],
+      "expo-sqlite",
+      "expo-secure-store",
+      "expo-sharing",
+      [
+        "expo-widgets",
+        {
+          "enableAndroid": true,
+          "groupIdentifier": "group.com.fintrack.app",
+          "widgets": [
+            {
+              "name": "FinTrackBalance",
+              "displayName": "FinTrack Balance",
+              "description": "Glance at your selected account balance",
+              "ios": {
+                "supportedFamilies": ["systemSmall", "systemMedium"]
+              }
+            }
+          ]
         }
       ]
     ],
