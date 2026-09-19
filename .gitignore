@@ -44,3 +44,8 @@ example
 
 
 /graphify-out
+
+
+# build
+/build
+/build-*.apk
