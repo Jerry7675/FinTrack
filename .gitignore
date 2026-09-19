@@ -48,4 +48,4 @@ example
 
 # build
 /build
-/build-*.apk
+*.apk
