@@ -114,6 +114,12 @@ function RootNavigator() {
         <Stack.Screen name='planning/goals' />
         <Stack.Screen name='planning/subscriptions' />
         <Stack.Screen name='planning/debts' />
+        <Stack.Screen name='planning/net-worth' />
+        <Stack.Screen name='planning/recycle' />
+        <Stack.Screen name='planning/forecast' />
+        <Stack.Screen name='planning/what-if' />
+        <Stack.Screen name='planning/calendar' />
+        <Stack.Screen name='planning/customize-home' />
       </Stack>
     </ToastProvider>
   );

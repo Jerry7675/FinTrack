@@ -25,10 +25,11 @@ import {
   EmptyState,
   Screen,
   SectionHeader,
+  useThemeColors,
 } from '@/components/ui/primitives';
 import { characters } from '@/constants/characters';
 import { db } from '@/lib/db/client';
-import { listTransactions } from '@/lib/db/queries';
+import { listRecurring, listTransactions } from '@/lib/db/queries';
 import { layout } from '@/lib/layout';
 import { formatMoney, fromMinorUnits } from '@/lib/money';
 import { useApp } from '@/providers/app-provider';
@@ -37,11 +38,18 @@ type Range = ChartRange | 'month' | 'year';
 
 export function InsightsScreen() {
   const { settings, accounts } = useApp();
+  const c = useThemeColors();
   const [range, setRange] = useState<Range>('30d');
   const [selectedDay, setSelectedDay] = useState<string | undefined>();
   const [txns, setTxns] = useState<
     Awaited<ReturnType<typeof listTransactions>>
   >([]);
+  const [prevTxns, setPrevTxns] = useState<
+    Awaited<ReturnType<typeof listTransactions>>
+  >([]);
+  const [recurringTitles, setRecurringTitles] = useState<Set<string>>(
+    new Set()
+  );
 
   const account = accounts.find((a) => a.id === settings?.activeAccountId);
   const currency = account?.currencyCode ?? settings?.defaultCurrency ?? 'USD';
@@ -70,14 +78,31 @@ export function InsightsScreen() {
   }, [range]);
 
   const load = useCallback(async () => {
-    const rows = await listTransactions(db, {
-      accountId: account?.id,
-      groupId: !account ? settings?.activeGroupId : undefined,
-      from: bounds.from,
-      to: bounds.to,
-      limit: 2000,
-    });
+    const spanMs = bounds.to.getTime() - bounds.from.getTime();
+    const prevTo = new Date(bounds.from.getTime() - 1);
+    const prevFrom = new Date(prevTo.getTime() - spanMs);
+    const [rows, prevRows, recurring] = await Promise.all([
+      listTransactions(db, {
+        accountId: account?.id,
+        groupId: !account ? settings?.activeGroupId : undefined,
+        from: bounds.from,
+        to: bounds.to,
+        limit: 2000,
+      }),
+      listTransactions(db, {
+        accountId: account?.id,
+        groupId: !account ? settings?.activeGroupId : undefined,
+        from: prevFrom,
+        to: prevTo,
+        limit: 2000,
+      }),
+      listRecurring(db),
+    ]);
     setTxns(rows);
+    setPrevTxns(prevRows);
+    setRecurringTitles(
+      new Set(recurring.map((r) => r.title.trim().toLowerCase()))
+    );
   }, [account, settings?.activeGroupId, bounds]);
 
   useEffect(() => {
@@ -91,6 +116,28 @@ export function InsightsScreen() {
     0
   );
   const incomeTotal = income.reduce((s, t) => s + t.transaction.amountMinor, 0);
+  const savingsRate =
+    incomeTotal > 0
+      ? Math.round(((incomeTotal - expenseTotal) / incomeTotal) * 100)
+      : null;
+
+  const prevExpenseTotal = prevTxns
+    .filter((t) => t.transaction.type === 'expense')
+    .reduce((s, t) => s + t.transaction.amountMinor, 0);
+
+  const flexibleVsRecurring = useMemo(() => {
+    let recurringSpend = 0;
+    let flexibleSpend = 0;
+    for (const row of expenses) {
+      const title = row.transaction.title.trim().toLowerCase();
+      if (recurringTitles.has(title)) {
+        recurringSpend += row.transaction.amountMinor;
+      } else {
+        flexibleSpend += row.transaction.amountMinor;
+      }
+    }
+    return { recurringSpend, flexibleSpend };
+  }, [expenses, recurringTitles]);
 
   const byCategory = useMemo(() => {
     const map = new Map<
@@ -109,6 +156,25 @@ export function InsightsScreen() {
     }
     return [...map.values()].sort((a, b) => b.total - a.total);
   }, [expenses]);
+
+  const categoryDelta = useMemo(() => {
+    const prevMap = new Map<string, number>();
+    for (const row of prevTxns) {
+      if (row.transaction.type !== 'expense') continue;
+      const name = row.category?.name ?? 'Other';
+      prevMap.set(name, (prevMap.get(name) ?? 0) + row.transaction.amountMinor);
+    }
+    return byCategory.slice(0, 5).map((cat) => {
+      const prev = prevMap.get(cat.name) ?? 0;
+      const delta =
+        prev === 0
+          ? cat.total > 0
+            ? 100
+            : 0
+          : Math.round(((cat.total - prev) / prev) * 100);
+      return { name: cat.name, total: cat.total, delta };
+    });
+  }, [byCategory, prevTxns]);
 
   const pieData = byCategory.slice(0, 6).map((cat) => ({
     value: fromMinorUnits(cat.total, currency),
@@ -190,7 +256,59 @@ export function InsightsScreen() {
               </AppText>
             </View>
           </View>
+          {savingsRate != null ? (
+            <AppText size='sm' muted className='mt-2'>
+              Savings rate {savingsRate}% · vs prior period spent{' '}
+              {formatMoney(prevExpenseTotal, currency)} (
+              {prevExpenseTotal === 0
+                ? 'n/a'
+                : `${expenseTotal >= prevExpenseTotal ? '+' : ''}${Math.round(((expenseTotal - prevExpenseTotal) / prevExpenseTotal) * 100)}%`}
+              )
+            </AppText>
+          ) : null}
         </Card>
+
+        <SectionHeader title='Recurring vs flexible' />
+        <Card>
+          <AppText size='sm'>
+            Recurring-like{' '}
+            {formatMoney(flexibleVsRecurring.recurringSpend, currency)}
+          </AppText>
+          <AppText size='sm' className='mt-1'>
+            Flexible {formatMoney(flexibleVsRecurring.flexibleSpend, currency)}
+          </AppText>
+          <AppText size='xs' muted className='mt-2'>
+            Matched by title against recurring templates.
+          </AppText>
+        </Card>
+
+        <SectionHeader title='vs prior period' />
+        {categoryDelta.length === 0 ? (
+          <AppText muted>No category comparison yet</AppText>
+        ) : (
+          categoryDelta.map((row) => (
+            <View
+              key={row.name}
+              className='flex-row items-center justify-between py-2'
+              style={{ borderBottomWidth: 1, borderBottomColor: c.line }}
+            >
+              <View>
+                <AppText weight='medium'>{row.name}</AppText>
+                <AppText size='sm' muted>
+                  {formatMoney(row.total, currency)}
+                </AppText>
+              </View>
+              <AppText
+                style={{
+                  color: row.delta > 0 ? c.expense : c.income,
+                }}
+              >
+                {row.delta > 0 ? '+' : ''}
+                {row.delta}%
+              </AppText>
+            </View>
+          ))
+        )}
 
         <SectionHeader title='Trend' />
         {expenses.length === 0 ? (

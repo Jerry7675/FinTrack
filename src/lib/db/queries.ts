@@ -1,5 +1,16 @@
 import { startOfMonth, startOfWeek, startOfYear } from 'date-fns';
-import { and, desc, eq, gte, isNull, like, lte, or, sql } from 'drizzle-orm';
+import {
+  and,
+  desc,
+  eq,
+  gte,
+  isNotNull,
+  isNull,
+  like,
+  lte,
+  or,
+  sql,
+} from 'drizzle-orm';
 
 import { createId } from '@/lib/id';
 import { toMinorUnits } from '@/lib/money';
@@ -514,6 +525,7 @@ export async function updateSettings(
     defaultCurrency: string;
     profileImagePath: string | null;
     remindersEnabled: boolean;
+    dashboardLayout: string | null;
   }>
 ) {
   await database
@@ -920,4 +932,228 @@ export async function softDeleteCategory(database: AppDatabase, id: string) {
     .update(categories)
     .set({ deletedAt: new Date(), updatedAt: new Date() })
     .where(eq(categories.id, id));
+}
+
+export async function recordDebtPayment(
+  database: AppDatabase,
+  id: string,
+  amount: number,
+  currencyCode: string
+) {
+  const [row] = await database
+    .select()
+    .from(debts)
+    .where(and(eq(debts.id, id), isNull(debts.deletedAt)))
+    .limit(1);
+  if (!row) return;
+  const delta = toMinorUnits(amount, currencyCode);
+  await database
+    .update(debts)
+    .set({
+      remainingMinor: Math.max(0, row.remainingMinor - delta),
+      updatedAt: new Date(),
+    })
+    .where(eq(debts.id, id));
+}
+
+export async function getNetWorthSnapshot(database: AppDatabase) {
+  const [accountRows, debtRows] = await Promise.all([
+    database.select().from(accounts).where(isNull(accounts.deletedAt)),
+    database.select().from(debts).where(isNull(debts.deletedAt)),
+  ]);
+
+  const assetLines: {
+    id: string;
+    name: string;
+    currencyCode: string;
+    amountMinor: number;
+  }[] = [];
+  for (const a of accountRows) {
+    const bal = await getAccountBalance(database, a.id);
+    assetLines.push({
+      id: a.id,
+      name: a.name,
+      currencyCode: a.currencyCode,
+      amountMinor: bal,
+    });
+  }
+
+  const liabilityLines = debtRows
+    .filter((d) => d.kind === 'i_owe')
+    .map((d) => ({
+      id: d.id,
+      name: d.name,
+      currencyCode: d.currencyCode,
+      amountMinor: d.remainingMinor,
+    }));
+
+  const receivableLines = debtRows
+    .filter((d) => d.kind === 'owed_to_me')
+    .map((d) => ({
+      id: d.id,
+      name: d.name,
+      currencyCode: d.currencyCode,
+      amountMinor: d.remainingMinor,
+    }));
+
+  return { assetLines, liabilityLines, receivableLines };
+}
+
+export type RecycleItem = {
+  id: string;
+  entity:
+    | 'transaction'
+    | 'budget'
+    | 'goal'
+    | 'recurring'
+    | 'subscription'
+    | 'debt'
+    | 'category';
+  title: string;
+  subtitle: string;
+  deletedAt: Date;
+};
+
+export async function listRecycleBin(
+  database: AppDatabase
+): Promise<RecycleItem[]> {
+  const [
+    txnRows,
+    budgetRows,
+    goalRows,
+    recurringRows,
+    subRows,
+    debtRows,
+    catRows,
+  ] = await Promise.all([
+    database
+      .select()
+      .from(transactions)
+      .where(isNotNull(transactions.deletedAt))
+      .orderBy(desc(transactions.deletedAt))
+      .limit(50),
+    database
+      .select()
+      .from(budgets)
+      .where(isNotNull(budgets.deletedAt))
+      .orderBy(desc(budgets.deletedAt))
+      .limit(30),
+    database
+      .select()
+      .from(goals)
+      .where(isNotNull(goals.deletedAt))
+      .orderBy(desc(goals.deletedAt))
+      .limit(30),
+    database
+      .select()
+      .from(recurringTemplates)
+      .where(isNotNull(recurringTemplates.deletedAt))
+      .orderBy(desc(recurringTemplates.deletedAt))
+      .limit(30),
+    database
+      .select()
+      .from(subscriptions)
+      .where(isNotNull(subscriptions.deletedAt))
+      .orderBy(desc(subscriptions.deletedAt))
+      .limit(30),
+    database
+      .select()
+      .from(debts)
+      .where(isNotNull(debts.deletedAt))
+      .orderBy(desc(debts.deletedAt))
+      .limit(30),
+    database
+      .select()
+      .from(categories)
+      .where(isNotNull(categories.deletedAt))
+      .orderBy(desc(categories.deletedAt))
+      .limit(30),
+  ]);
+
+  const items: RecycleItem[] = [
+    ...txnRows.map((t) => ({
+      id: t.id,
+      entity: 'transaction' as const,
+      title: t.title,
+      subtitle: `${t.type} · ${t.currencyCode}`,
+      deletedAt: t.deletedAt as Date,
+    })),
+    ...budgetRows.map((b) => ({
+      id: b.id,
+      entity: 'budget' as const,
+      title: b.name,
+      subtitle: 'Budget',
+      deletedAt: b.deletedAt as Date,
+    })),
+    ...goalRows.map((g) => ({
+      id: g.id,
+      entity: 'goal' as const,
+      title: g.name,
+      subtitle: 'Goal',
+      deletedAt: g.deletedAt as Date,
+    })),
+    ...recurringRows.map((r) => ({
+      id: r.id,
+      entity: 'recurring' as const,
+      title: r.title,
+      subtitle: 'Recurring',
+      deletedAt: r.deletedAt as Date,
+    })),
+    ...subRows.map((s) => ({
+      id: s.id,
+      entity: 'subscription' as const,
+      title: s.name,
+      subtitle: 'Subscription',
+      deletedAt: s.deletedAt as Date,
+    })),
+    ...debtRows.map((d) => ({
+      id: d.id,
+      entity: 'debt' as const,
+      title: d.name,
+      subtitle: 'Debt',
+      deletedAt: d.deletedAt as Date,
+    })),
+    ...catRows.map((c) => ({
+      id: c.id,
+      entity: 'category' as const,
+      title: c.name,
+      subtitle: 'Category',
+      deletedAt: c.deletedAt as Date,
+    })),
+  ];
+
+  items.sort((a, b) => b.deletedAt.getTime() - a.deletedAt.getTime());
+  return items;
+}
+
+export async function restoreRecycleItem(
+  database: AppDatabase,
+  entity: RecycleItem['entity'],
+  id: string
+) {
+  const patch = { deletedAt: null, updatedAt: new Date() };
+  if (entity === 'transaction') {
+    await database
+      .update(transactions)
+      .set(patch)
+      .where(eq(transactions.id, id));
+  } else if (entity === 'budget') {
+    await database.update(budgets).set(patch).where(eq(budgets.id, id));
+  } else if (entity === 'goal') {
+    await database.update(goals).set(patch).where(eq(goals.id, id));
+  } else if (entity === 'recurring') {
+    await database
+      .update(recurringTemplates)
+      .set(patch)
+      .where(eq(recurringTemplates.id, id));
+  } else if (entity === 'subscription') {
+    await database
+      .update(subscriptions)
+      .set(patch)
+      .where(eq(subscriptions.id, id));
+  } else if (entity === 'debt') {
+    await database.update(debts).set(patch).where(eq(debts.id, id));
+  } else if (entity === 'category') {
+    await database.update(categories).set(patch).where(eq(categories.id, id));
+  }
 }
