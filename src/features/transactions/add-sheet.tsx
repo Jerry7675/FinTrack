@@ -379,6 +379,17 @@ export function AddTransactionSheet({ visible, onClose, onSaved }: Props) {
                     />
                   </View>
                 </View>
+                <Button
+                  label='Scan receipt (OCR soon)'
+                  variant='ghost'
+                  icon='scan-outline'
+                  onPress={() =>
+                    showToast(
+                      'On-device OCR is planned — attach a photo for now',
+                      'default'
+                    )
+                  }
+                />
                 {pendingImages.length ? (
                   <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                     <View className='flex-row gap-2'>

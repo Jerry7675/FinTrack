@@ -1,6 +1,6 @@
 import { FlashList } from '@shopify/flash-list';
 import { format } from 'date-fns';
-import { router } from 'expo-router';
+import { type Href, router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Modal,
@@ -37,6 +37,7 @@ import {
 } from '@/components/ui/primitives';
 import { characters } from '@/constants/characters';
 import { AddTransactionSheet } from '@/features/transactions/add-sheet';
+import { parseDashboardLayout } from '@/lib/dashboard-layout';
 import { db } from '@/lib/db/client';
 import {
   getAccountBalance,
@@ -166,11 +167,22 @@ export function DashboardScreen() {
     setRefreshing(false);
   };
 
+  const dashLayout = useMemo(
+    () => parseDashboardLayout(settings?.dashboardLayout),
+    [settings?.dashboardLayout]
+  );
+  const show = useCallback(
+    (id: (typeof dashLayout)[number]['id']) =>
+      dashLayout.find((c) => c.id === id)?.visible !== false,
+    [dashLayout]
+  );
+  const orderedSections = dashLayout.filter((c) => c.visible);
+
   return (
     <Screen>
       <View className='flex-1' style={{ paddingHorizontal: layout.gutter }}>
         <FlashList
-          data={txns}
+          data={show('transactions') ? txns : []}
           keyExtractor={(item) => item.transaction.id}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
@@ -200,131 +212,179 @@ export function DashboardScreen() {
                   </View>
                 </Pressable>
                 <IconButton
+                  name='options-outline'
+                  onPress={() =>
+                    router.push('/planning/customize-home' as Href)
+                  }
+                />
+                <IconButton
                   name='notifications-outline'
                   onPress={() => router.push('/(tabs)/settings')}
                 />
               </View>
 
-              <View className='mt-5'>
-                <BalanceCard
-                  amount={formatMoney(totalBalance, currency)}
-                  onAdd={() => setAddOpen(true)}
-                />
-              </View>
-
-              <View className='mt-4 flex-row gap-3'>
-                <ActionTile
-                  label='Add'
-                  icon='add-circle-outline'
-                  tone='green'
-                  onPress={() => setAddOpen(true)}
-                />
-                <ActionTile
-                  label='Accounts'
-                  icon='wallet-outline'
-                  tone='mint'
-                  onPress={() => router.push('/(tabs)/accounts')}
-                />
-                <ActionTile
-                  label='Insights'
-                  icon='stats-chart-outline'
-                  tone='slate'
-                  onPress={() => router.push('/(tabs)/insights')}
-                />
-              </View>
-
-              <View className='mt-4'>
-                <SummaryStrip
-                  items={[
-                    {
-                      label: 'Spent',
-                      value: formatMoney(summary.spent, currency),
-                    },
-                    {
-                      label: 'Income',
-                      value: formatMoney(summary.income, currency),
-                    },
-                    {
-                      label: 'Transfers',
-                      value: formatMoney(summary.transfers, currency),
-                    },
-                  ]}
-                />
-              </View>
-
-              {goals.length > 0 ? (
-                <Pressable
-                  onPress={() => router.push('/planning/goals')}
-                  className='mt-4'
-                >
-                  <AppText size='sm' muted weight='semibold' className='mb-2'>
-                    GOALS
-                  </AppText>
-                  <View className='flex-row flex-wrap gap-3'>
-                    {goals.slice(0, 4).map((g) => {
-                      const pct = Math.min(
-                        1,
-                        g.currentMinor / Math.max(g.targetMinor, 1)
-                      );
-                      return (
-                        <View key={g.id} className='items-center gap-1'>
-                          <GoalRing
-                            progress={pct}
-                            size={52}
-                            label={`${Math.round(pct * 100)}%`}
+              {orderedSections.map((section) => {
+                if (section.id === 'balance') {
+                  return (
+                    <View key='balance' className='mt-5'>
+                      <BalanceCard
+                        amount={formatMoney(totalBalance, currency)}
+                        onAdd={() => setAddOpen(true)}
+                      />
+                    </View>
+                  );
+                }
+                if (section.id === 'actions') {
+                  return (
+                    <View key='actions' className='mt-4 flex-row gap-3'>
+                      <ActionTile
+                        label='Add'
+                        icon='add-circle-outline'
+                        tone='green'
+                        onPress={() => setAddOpen(true)}
+                      />
+                      <ActionTile
+                        label='Accounts'
+                        icon='wallet-outline'
+                        tone='mint'
+                        onPress={() => router.push('/(tabs)/accounts')}
+                      />
+                      <ActionTile
+                        label='Insights'
+                        icon='stats-chart-outline'
+                        tone='slate'
+                        onPress={() => router.push('/(tabs)/insights')}
+                      />
+                    </View>
+                  );
+                }
+                if (section.id === 'summary') {
+                  return (
+                    <View key='summary' className='mt-4'>
+                      <SummaryStrip
+                        items={[
+                          {
+                            label: 'Spent',
+                            value: formatMoney(summary.spent, currency),
+                          },
+                          {
+                            label: 'Income',
+                            value: formatMoney(summary.income, currency),
+                          },
+                          {
+                            label: 'Transfers',
+                            value: formatMoney(summary.transfers, currency),
+                          },
+                        ]}
+                      />
+                    </View>
+                  );
+                }
+                if (section.id === 'goals' && goals.length > 0) {
+                  return (
+                    <Pressable
+                      key='goals'
+                      onPress={() => router.push('/planning/goals')}
+                      className='mt-4'
+                    >
+                      <AppText
+                        size='sm'
+                        muted
+                        weight='semibold'
+                        className='mb-2'
+                      >
+                        GOALS
+                      </AppText>
+                      <View className='flex-row flex-wrap gap-3'>
+                        {goals.slice(0, 4).map((g) => {
+                          const pct = Math.min(
+                            1,
+                            g.currentMinor / Math.max(g.targetMinor, 1)
+                          );
+                          return (
+                            <View key={g.id} className='items-center gap-1'>
+                              <GoalRing
+                                progress={pct}
+                                size={52}
+                                label={`${Math.round(pct * 100)}%`}
+                              />
+                              <AppText size='xs' muted>
+                                {g.name.length > 10
+                                  ? `${g.name.slice(0, 10)}…`
+                                  : g.name}
+                              </AppText>
+                            </View>
+                          );
+                        })}
+                      </View>
+                    </Pressable>
+                  );
+                }
+                if (section.id === 'chart') {
+                  return (
+                    <View key='chart'>
+                      <View className='mt-4'>
+                        <RangeFilters
+                          value={chartRange}
+                          onChange={setChartRange}
+                        />
+                      </View>
+                      <View className='mt-3'>
+                        <SpendAreaChart
+                          points={chartPoints}
+                          title='Spending trend'
+                        />
+                      </View>
+                    </View>
+                  );
+                }
+                if (section.id === 'activity') {
+                  return (
+                    <View key='activity' className='mt-3'>
+                      <ActivityDots amountsByDay={activityMap} />
+                    </View>
+                  );
+                }
+                if (section.id === 'transactions') {
+                  return (
+                    <View key='transactions-header'>
+                      <View className='mt-4'>
+                        <Field
+                          placeholder='Search name, notes, tags…'
+                          value={query}
+                          onChangeText={setQuery}
+                        />
+                      </View>
+                      <View className='mt-3 flex-row flex-wrap gap-2'>
+                        {(
+                          [
+                            [null, 'All'],
+                            ['expense', 'Expense'],
+                            ['income', 'Income'],
+                            ['transfer', 'Transfer'],
+                          ] as const
+                        ).map(([value, label]) => (
+                          <Chip
+                            key={label}
+                            label={label}
+                            active={typeFilter === value}
+                            onPress={() => setTypeFilter(value)}
                           />
-                          <AppText size='xs' muted>
-                            {g.name.length > 10
-                              ? `${g.name.slice(0, 10)}…`
-                              : g.name}
-                          </AppText>
-                        </View>
-                      );
-                    })}
-                  </View>
-                </Pressable>
-              ) : null}
-
-              <View className='mt-4'>
-                <RangeFilters value={chartRange} onChange={setChartRange} />
-              </View>
-              <View className='mt-3'>
-                <SpendAreaChart points={chartPoints} title='Spending trend' />
-              </View>
-
-              <View className='mt-3'>
-                <ActivityDots amountsByDay={activityMap} />
-              </View>
-
-              <View className='mt-4'>
-                <Field
-                  placeholder='Search name, notes, tags…'
-                  value={query}
-                  onChangeText={setQuery}
-                />
-              </View>
-
-              <View className='mt-3 flex-row flex-wrap gap-2'>
-                {(
-                  [
-                    [null, 'All'],
-                    ['expense', 'Expense'],
-                    ['income', 'Income'],
-                    ['transfer', 'Transfer'],
-                  ] as const
-                ).map(([value, label]) => (
-                  <Chip
-                    key={label}
-                    label={label}
-                    active={typeFilter === value}
-                    onPress={() => setTypeFilter(value)}
-                  />
-                ))}
-              </View>
-
-              <AppText size='sm' muted weight='semibold' className='mb-2 mt-5'>
-                TRANSACTIONS
-              </AppText>
+                        ))}
+                      </View>
+                      <AppText
+                        size='sm'
+                        muted
+                        weight='semibold'
+                        className='mb-2 mt-5'
+                      >
+                        TRANSACTIONS
+                      </AppText>
+                    </View>
+                  );
+                }
+                return null;
+              })}
             </View>
           }
           ListEmptyComponent={

@@ -1,5 +1,5 @@
 import * as LocalAuthentication from 'expo-local-authentication';
-import { router } from 'expo-router';
+import { type Href, router } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, ScrollView, View } from 'react-native';
@@ -17,7 +17,14 @@ import {
 import { useToast } from '@/components/ui/toast';
 import { characters } from '@/constants/characters';
 import { updateWidgetSnapshot } from '@/features/widgets/update';
-import { exportBackupJson, exportTransactionsCsv } from '@/lib/backup';
+import {
+  exportBackupJson,
+  exportEncryptedBackup,
+  exportTransactionsCsv,
+  importBackupFromText,
+  pickAndImportTransactionsCsv,
+  pickAndReadBackupFile,
+} from '@/lib/backup';
 import { db } from '@/lib/db/client';
 import {
   getBudgetSpend,
@@ -43,7 +50,7 @@ import { useApp } from '@/providers/app-provider';
 const PIN_KEY = 'fintrack_pin';
 
 export function SettingsScreen() {
-  const { settings, setTheme, setLockEnabled, refresh } = useApp();
+  const { settings, accounts, setTheme, setLockEnabled, refresh } = useApp();
   const { showToast } = useToast();
   const [busy, setBusy] = useState(false);
 
@@ -225,6 +232,131 @@ export function SettingsScreen() {
     }
   };
 
+  const onImportCsv = async () => {
+    const account =
+      accounts.find((a) => a.id === settings?.activeAccountId) ?? accounts[0];
+    if (!account) {
+      showToast('Create an account first', 'error');
+      return;
+    }
+    setBusy(true);
+    try {
+      const result = await pickAndImportTransactionsCsv({
+        accountId: account.id,
+        defaultCurrency: account.currencyCode,
+      });
+      await refresh();
+      showToast(
+        `Imported ${result.imported} · skipped ${result.skipped}`,
+        'success'
+      );
+    } catch (e) {
+      if (String(e).includes('Cancelled')) return;
+      showToast(`Import failed: ${String(e)}`, 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onExportEncrypted = async () => {
+    Alert.prompt?.(
+      'Encrypted backup',
+      'Enter a password (min 4 characters)',
+      async (password) => {
+        if (!password || password.length < 4) {
+          showToast('Password too short', 'error');
+          return;
+        }
+        setBusy(true);
+        try {
+          await exportEncryptedBackup(password);
+          showToast('Encrypted backup exported', 'success');
+        } catch (e) {
+          showToast(`Export failed: ${String(e)}`, 'error');
+        } finally {
+          setBusy(false);
+        }
+      },
+      'secure-text'
+    );
+    if (!Alert.prompt) {
+      // Android fallback
+      Alert.alert(
+        'Encrypted backup',
+        'Enter password in the next step via export flow.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Use default key',
+            onPress: async () => {
+              setBusy(true);
+              try {
+                await exportEncryptedBackup('fintrack');
+                showToast(
+                  'Exported with temporary password "fintrack" — change on next export',
+                  'success'
+                );
+              } catch (e) {
+                showToast(`Export failed: ${String(e)}`, 'error');
+              } finally {
+                setBusy(false);
+              }
+            },
+          },
+        ]
+      );
+    }
+  };
+
+  const onImportBackup = async () => {
+    setBusy(true);
+    try {
+      const text = await pickAndReadBackupFile();
+      const runRestore = async (password?: string) => {
+        Alert.alert(
+          'Restore backup?',
+          'This replaces all FinTrack data on this device. Continue?',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Restore',
+              style: 'destructive',
+              onPress: async () => {
+                try {
+                  await importBackupFromText(text, password);
+                  await refresh();
+                  showToast('Backup restored', 'success');
+                } catch (e) {
+                  showToast(`Restore failed: ${String(e)}`, 'error');
+                }
+              },
+            },
+          ]
+        );
+      };
+      if (text.trim().startsWith('FTENC1')) {
+        Alert.prompt?.(
+          'Encrypted backup',
+          'Enter password',
+          (password) => {
+            void runRestore(password);
+          },
+          'secure-text'
+        );
+        if (!Alert.prompt) {
+          await runRestore('fintrack');
+        }
+      } else {
+        await runRestore();
+      }
+    } catch (e) {
+      if (String(e).includes('Cancelled')) return;
+      showToast(`Import failed: ${String(e)}`, 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <Screen>
       <ScrollView
@@ -329,25 +461,70 @@ export function SettingsScreen() {
           onPress={() => router.push('/planning/debts')}
         />
         <ListRow
+          title='Net worth'
+          subtitle='Assets, receivables, and liabilities'
+          onPress={() => router.push('/planning/net-worth' as Href)}
+        />
+        <ListRow
+          title='Cash-flow forecast'
+          subtitle='Next 30–90 days projection'
+          onPress={() => router.push('/planning/forecast' as Href)}
+        />
+        <ListRow
+          title='Calendar'
+          subtitle='Activity and upcoming dues'
+          onPress={() => router.push('/planning/calendar' as Href)}
+        />
+        <ListRow
+          title='What-if'
+          subtitle='Explore savings scenarios'
+          onPress={() => router.push('/planning/what-if' as Href)}
+        />
+        <ListRow
+          title='Customize home'
+          subtitle='Show, hide, and reorder dashboard cards'
+          onPress={() => router.push('/planning/customize-home' as Href)}
+        />
+        <ListRow
           title='Categories'
           subtitle='Icons and kinds — includes IT defaults'
           onPress={() => router.push('/categories')}
         />
 
-        <SectionHeader title='Data' />
+        <SectionHeader title='Data & privacy' />
         <ListRow
           title='Export backup (JSON)'
           subtitle='Portable dump for cloud / Drive later'
           onPress={onExportJson}
         />
         <ListRow
+          title='Export encrypted backup'
+          subtitle='Password-protected FinTrack file'
+          onPress={onExportEncrypted}
+        />
+        <ListRow
+          title='Import / restore backup'
+          subtitle='Preview confirm — replaces local data'
+          onPress={onImportBackup}
+        />
+        <ListRow
           title='Export CSV'
           subtitle='Transactions spreadsheet'
           onPress={onExportCsv}
         />
+        <ListRow
+          title='Import CSV'
+          subtitle='Map into the active account'
+          onPress={onImportCsv}
+        />
+        <ListRow
+          title='Recently deleted'
+          subtitle='Restore soft-deleted items'
+          onPress={() => router.push('/planning/recycle' as Href)}
+        />
         <AppText size='sm' muted className='mt-3'>
-          Receipt photos stay on-device. Paths are stored in the database; if a
-          file is missing, FinTrack shows a placeholder.
+          Your financial data stays on this device. Receipt photos stay
+          on-device. No bank credentials required.
         </AppText>
 
         <View className='mt-6'>

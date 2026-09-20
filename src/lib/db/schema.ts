@@ -227,6 +227,8 @@ export const settings = sqliteTable('settings', {
   remindersEnabled: integer('reminders_enabled', { mode: 'boolean' })
     .notNull()
     .default(true),
+  /** JSON: [{ id: string, visible: boolean }, ...] for home dashboard cards */
+  dashboardLayout: text('dashboard_layout'),
   updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
     .notNull()
     .default(sql`(unixepoch() * 1000)`),
