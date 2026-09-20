@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Pressable, ScrollView, View } from 'react-native';
+import { Pressable, View } from 'react-native';
 
 import {
   AppText,
@@ -7,8 +7,11 @@ import {
   CategoryGlyph,
   ConfirmDialog,
   Field,
+  FormScroll,
+  IconButton,
   Screen,
   ScreenHeader,
+  useThemeColors,
 } from '@/components/ui/primitives';
 import { useToast } from '@/components/ui/toast';
 import { CATEGORY_ICONS } from '@/lib/categories/icons';
@@ -37,6 +40,7 @@ const emptyDraft = (): Draft => ({
 
 export function CategoriesScreen() {
   const { colorScheme } = useApp();
+  const theme = useThemeColors();
   const { showToast } = useToast();
   const [items, setItems] = useState<Category[]>([]);
   const [draft, setDraft] = useState<Draft>(emptyDraft);
@@ -120,10 +124,9 @@ export function CategoriesScreen() {
 
   return (
     <Screen>
-      <ScrollView
+      <FormScroll
         contentContainerStyle={{
           paddingHorizontal: layout.gutter,
-          paddingBottom: 40,
         }}
       >
         <ScreenHeader title='Categories' />
@@ -207,19 +210,19 @@ export function CategoriesScreen() {
                 {c.isDefault ? ' · default' : ''}
               </AppText>
             </View>
-            <Pressable onPress={() => startEdit(c)} hitSlop={8}>
-              <AppText size='sm' className='text-accent'>
-                Edit
-              </AppText>
-            </Pressable>
-            <Pressable onPress={() => setPendingDelete(c)} hitSlop={8}>
-              <AppText size='sm' className='text-expense'>
-                Remove
-              </AppText>
-            </Pressable>
+            <IconButton
+              name='create-outline'
+              color={theme.accent}
+              onPress={() => startEdit(c)}
+            />
+            <IconButton
+              name='trash-outline'
+              color={theme.expense}
+              onPress={() => setPendingDelete(c)}
+            />
           </View>
         ))}
-      </ScrollView>
+      </FormScroll>
 
       <ConfirmDialog
         visible={pendingDelete !== null}

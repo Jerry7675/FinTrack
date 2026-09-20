@@ -1,11 +1,12 @@
 import { addMonths } from 'date-fns';
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, ScrollView, View } from 'react-native';
+import { Alert, View } from 'react-native';
 
 import {
   Button,
   ConfirmDialog,
   Field,
+  FormScroll,
   ListRow,
   Screen,
   ScreenHeader,
@@ -59,10 +60,9 @@ export function SubscriptionsScreen() {
 
   return (
     <Screen>
-      <ScrollView
+      <FormScroll
         contentContainerStyle={{
           paddingHorizontal: layout.gutter,
-          paddingBottom: 40,
         }}
       >
         <ScreenHeader title='Subscriptions' />
@@ -84,7 +84,7 @@ export function SubscriptionsScreen() {
             onPress={() => setPending(s.id)}
           />
         ))}
-      </ScrollView>
+      </FormScroll>
       <ConfirmDialog
         visible={pending !== null}
         title='Delete subscription?'

@@ -75,7 +75,11 @@
               "displayName": "FinTrack Balance",
               "description": "Glance at your selected account balance",
               "ios": {
-                "supportedFamilies": ["systemSmall", "systemMedium"]
+                "supportedFamilies": [
+                  "systemSmall",
+                  "systemMedium",
+                  "systemLarge"
+                ]
               }
             }
           ]

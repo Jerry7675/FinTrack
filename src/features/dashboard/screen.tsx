@@ -30,6 +30,7 @@ import {
   Chip,
   EmptyState,
   Field,
+  GoalRing,
   IconButton,
   Screen,
   useThemeColors,
@@ -37,7 +38,12 @@ import {
 import { characters } from '@/constants/characters';
 import { AddTransactionSheet } from '@/features/transactions/add-sheet';
 import { db } from '@/lib/db/client';
-import { getAccountBalance, listTransactions } from '@/lib/db/queries';
+import {
+  getAccountBalance,
+  listGoals,
+  listTransactions,
+} from '@/lib/db/queries';
+import type { Goal } from '@/lib/db/schema';
 import { layout } from '@/lib/layout';
 import { formatMoney } from '@/lib/money';
 import { useApp } from '@/providers/app-provider';
@@ -58,6 +64,7 @@ export function DashboardScreen() {
     'expense' | 'income' | 'transfer' | null
   >(null);
   const [chartRange, setChartRange] = useState<ChartRange>('7d');
+  const [goals, setGoals] = useState<Goal[]>([]);
 
   const activeAccount = accounts.find(
     (a) => a.id === settings?.activeAccountId
@@ -98,6 +105,7 @@ export function DashboardScreen() {
       limit: 200,
     });
     setTxns(rows);
+    setGoals(await listGoals(db));
   }, [activeAccount, activeGroup, accounts, query, typeFilter]);
 
   useEffect(() => {
@@ -243,6 +251,39 @@ export function DashboardScreen() {
                   ]}
                 />
               </View>
+
+              {goals.length > 0 ? (
+                <Pressable
+                  onPress={() => router.push('/planning/goals')}
+                  className='mt-4'
+                >
+                  <AppText size='sm' muted weight='semibold' className='mb-2'>
+                    GOALS
+                  </AppText>
+                  <View className='flex-row flex-wrap gap-3'>
+                    {goals.slice(0, 4).map((g) => {
+                      const pct = Math.min(
+                        1,
+                        g.currentMinor / Math.max(g.targetMinor, 1)
+                      );
+                      return (
+                        <View key={g.id} className='items-center gap-1'>
+                          <GoalRing
+                            progress={pct}
+                            size={52}
+                            label={`${Math.round(pct * 100)}%`}
+                          />
+                          <AppText size='xs' muted>
+                            {g.name.length > 10
+                              ? `${g.name.slice(0, 10)}…`
+                              : g.name}
+                          </AppText>
+                        </View>
+                      );
+                    })}
+                  </View>
+                </Pressable>
+              ) : null}
 
               <View className='mt-4'>
                 <RangeFilters value={chartRange} onChange={setChartRange} />

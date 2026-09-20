@@ -153,10 +153,12 @@ export const recurringTemplates = sqliteTable('recurring_templates', {
   amountMinor: integer('amount_minor').notNull(),
   currencyCode: text('currency_code').notNull(),
   cadence: text('cadence', {
-    enum: ['daily', 'weekly', 'monthly', 'yearly'],
+    enum: ['daily', 'weekly', 'monthly', 'yearly', 'custom'],
   })
     .notNull()
     .default('monthly'),
+  /** Custom: every N days. Weekly: weekday 0–6. Monthly: day of month 1–31. */
+  intervalDays: integer('interval_days'),
   nextDueAt: integer('next_due_at', { mode: 'timestamp_ms' }).notNull(),
   note: text('note'),
   ...timestamps,

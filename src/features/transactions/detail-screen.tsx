@@ -10,6 +10,7 @@ import {
   CategoryGlyph,
   ConfirmDialog,
   Field,
+  FormScroll,
   GoBack,
   Screen,
 } from '@/components/ui/primitives';
@@ -100,10 +101,9 @@ export function TransactionDetailScreen() {
 
   return (
     <Screen>
-      <ScrollView
+      <FormScroll
         contentContainerStyle={{
           paddingHorizontal: layout.gutter,
-          paddingBottom: 40,
         }}
       >
         <GoBack />
@@ -195,7 +195,7 @@ export function TransactionDetailScreen() {
             onPress={() => setConfirmDelete(true)}
           />
         </View>
-      </ScrollView>
+      </FormScroll>
       <ConfirmDialog
         visible={confirmDelete}
         title='Delete transaction?'
