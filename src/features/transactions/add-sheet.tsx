@@ -1,7 +1,14 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useEffect, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
-import { Modal, Pressable, ScrollView, View } from 'react-native';
+import {
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  View,
+} from 'react-native';
 import { z } from 'zod';
 
 import { ReceiptThumb } from '@/components/media/images';
@@ -195,203 +202,213 @@ export function AddTransactionSheet({ visible, onClose, onSaved }: Props) {
         }`}
         style={{ paddingHorizontal: layout.gutter, paddingTop: 16 }}
       >
-        <View className='mb-4 flex-row items-center justify-between'>
-          <AppText size='xl' weight='bold'>
-            Add
-          </AppText>
-          <Pressable onPress={onClose}>
-            <AppText muted>Close</AppText>
-          </Pressable>
-        </View>
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 24 : 0}
+        >
+          <View className='mb-4 flex-row items-center justify-between'>
+            <AppText size='xl' weight='bold'>
+              Add
+            </AppText>
+            <Pressable onPress={onClose}>
+              <AppText muted>Close</AppText>
+            </Pressable>
+          </View>
 
-        <View className='mb-4 flex-row gap-2'>
-          {(['expense', 'income', 'transfer'] as const).map((m) => (
-            <View key={m} className='flex-1'>
-              <Chip
-                label={m[0].toUpperCase() + m.slice(1)}
-                active={mode === m}
-                onPress={() => setValue('mode', m)}
-              />
-            </View>
-          ))}
-        </View>
-
-        <ScrollView contentContainerStyle={{ gap: 14, paddingBottom: 40 }}>
-          <Controller
-            control={control}
-            name='amount'
-            render={({ field: { value, onChange } }) => (
-              <Field
-                label='Amount'
-                value={value}
-                onChangeText={onChange}
-                keyboardType='decimal-pad'
-                placeholder='0.00'
-              />
-            )}
-          />
-          <Controller
-            control={control}
-            name='title'
-            render={({ field: { value, onChange } }) => (
-              <Field
-                label='Title'
-                value={value}
-                onChangeText={onChange}
-                placeholder={
-                  mode === 'transfer' ? 'Transfer' : 'Coffee, AWS invoice…'
-                }
-              />
-            )}
-          />
-
-          <Controller
-            control={control}
-            name='accountId'
-            render={({ field: { value, onChange } }) => (
-              <Select
-                label='Account'
-                value={value}
-                onChange={onChange}
-                options={accounts.map((a) => ({
-                  label: `${a.name} · ${a.currencyCode}`,
-                  value: a.id,
-                }))}
-              />
-            )}
-          />
-
-          {mode === 'transfer' ? (
-            <Controller
-              control={control}
-              name='toAccountId'
-              render={({ field: { value, onChange } }) => (
-                <Select
-                  label='To account'
-                  value={value}
-                  onChange={onChange}
-                  options={accounts
-                    .filter((a) => a.id !== accountId)
-                    .map((a) => ({
-                      label: `${a.name} · ${a.currencyCode}`,
-                      value: a.id,
-                    }))}
-                  placeholder='Select destination'
+          <View className='mb-4 flex-row gap-2'>
+            {(['expense', 'income', 'transfer'] as const).map((m) => (
+              <View key={m} className='flex-1'>
+                <Chip
+                  label={m[0].toUpperCase() + m.slice(1)}
+                  active={mode === m}
+                  onPress={() => setValue('mode', m)}
                 />
-              )}
-            />
-          ) : (
-            <>
-              <AppText size='sm' muted weight='medium'>
-                Category
-              </AppText>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                <View className='flex-row gap-2'>
-                  {categories.map((cat) => (
-                    <Pressable
-                      key={cat.id}
-                      onPress={() => setValue('categoryId', cat.id)}
-                      className={`items-center gap-1 rounded-2xl px-3 py-2 ${
-                        categoryId === cat.id
-                          ? 'bg-accent/20'
-                          : colorScheme === 'dark'
-                            ? 'bg-surface-dark-raised'
-                            : 'bg-surface-raised'
-                      }`}
-                    >
-                      <CategoryGlyph
-                        iconKey={cat.iconKey}
-                        color={cat.color}
-                        size={32}
-                      />
-                      <AppText size='xs'>{cat.name}</AppText>
-                    </Pressable>
-                  ))}
-                </View>
-              </ScrollView>
-            </>
-          )}
+              </View>
+            ))}
+          </View>
 
-          <Controller
-            control={control}
-            name='note'
-            render={({ field: { value, onChange } }) => (
-              <Field
-                label='Note'
-                value={value}
-                onChangeText={onChange}
-                placeholder='Optional note'
-                multiline
-              />
-            )}
-          />
-          {mode !== 'transfer' ? (
+          <ScrollView
+            keyboardShouldPersistTaps='handled'
+            keyboardDismissMode='on-drag'
+            contentContainerStyle={{ gap: 14, paddingBottom: 80 }}
+          >
             <Controller
               control={control}
-              name='tags'
+              name='amount'
               render={({ field: { value, onChange } }) => (
                 <Field
-                  label='Tags'
+                  label='Amount'
                   value={value}
                   onChangeText={onChange}
-                  placeholder='saas, aws (comma separated)'
+                  keyboardType='decimal-pad'
+                  placeholder='0.00'
                 />
               )}
             />
-          ) : null}
+            <Controller
+              control={control}
+              name='title'
+              render={({ field: { value, onChange } }) => (
+                <Field
+                  label='Title'
+                  value={value}
+                  onChangeText={onChange}
+                  placeholder={
+                    mode === 'transfer' ? 'Transfer' : 'Coffee, AWS invoice…'
+                  }
+                />
+              )}
+            />
 
-          {mode !== 'transfer' ? (
-            <View className='gap-2'>
-              <AppText size='sm' muted weight='medium'>
-                Receipts / bills
-              </AppText>
-              <View className='flex-row gap-2'>
-                <View className='flex-1'>
-                  <Button
-                    label='Gallery'
-                    variant='secondary'
-                    icon='images-outline'
-                    onPress={onPickReceipts}
+            <Controller
+              control={control}
+              name='accountId'
+              render={({ field: { value, onChange } }) => (
+                <Select
+                  label='Account'
+                  value={value}
+                  onChange={onChange}
+                  options={accounts.map((a) => ({
+                    label: `${a.name} · ${a.currencyCode}`,
+                    value: a.id,
+                  }))}
+                />
+              )}
+            />
+
+            {mode === 'transfer' ? (
+              <Controller
+                control={control}
+                name='toAccountId'
+                render={({ field: { value, onChange } }) => (
+                  <Select
+                    label='To account'
+                    value={value}
+                    onChange={onChange}
+                    options={accounts
+                      .filter((a) => a.id !== accountId)
+                      .map((a) => ({
+                        label: `${a.name} · ${a.currencyCode}`,
+                        value: a.id,
+                      }))}
+                    placeholder='Select destination'
                   />
-                </View>
-                <View className='flex-1'>
-                  <Button
-                    label='Camera'
-                    variant='secondary'
-                    icon='camera-outline'
-                    onPress={onTakeReceipt}
-                  />
-                </View>
-              </View>
-              {pendingImages.length ? (
+                )}
+              />
+            ) : (
+              <>
+                <AppText size='sm' muted weight='medium'>
+                  Category
+                </AppText>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                   <View className='flex-row gap-2'>
-                    {pendingImages.map((path) => (
-                      <ReceiptThumb
-                        key={path}
-                        path={path}
-                        onPress={() =>
-                          setPendingImages((prev) =>
-                            prev.filter((p) => p !== path)
-                          )
-                        }
-                      />
+                    {categories.map((cat) => (
+                      <Pressable
+                        key={cat.id}
+                        onPress={() => setValue('categoryId', cat.id)}
+                        className={`items-center gap-1 rounded-2xl px-3 py-2 ${
+                          categoryId === cat.id
+                            ? 'bg-accent/20'
+                            : colorScheme === 'dark'
+                              ? 'bg-surface-dark-raised'
+                              : 'bg-surface-raised'
+                        }`}
+                      >
+                        <CategoryGlyph
+                          iconKey={cat.iconKey}
+                          color={cat.color}
+                          size={32}
+                        />
+                        <AppText size='xs'>{cat.name}</AppText>
+                      </Pressable>
                     ))}
                   </View>
                 </ScrollView>
-              ) : (
-                <AppText size='xs' muted>
-                  Multiple images per expense — stored on this device
-                </AppText>
-              )}
-            </View>
-          ) : null}
+              </>
+            )}
 
-          <AppText size='xs' muted>
-            Currency: {currency}
-          </AppText>
-          <Button label='Save' onPress={save} loading={saving} />
-        </ScrollView>
+            <Controller
+              control={control}
+              name='note'
+              render={({ field: { value, onChange } }) => (
+                <Field
+                  label='Note'
+                  value={value}
+                  onChangeText={onChange}
+                  placeholder='Optional note'
+                  multiline
+                />
+              )}
+            />
+            {mode !== 'transfer' ? (
+              <Controller
+                control={control}
+                name='tags'
+                render={({ field: { value, onChange } }) => (
+                  <Field
+                    label='Tags'
+                    value={value}
+                    onChangeText={onChange}
+                    placeholder='saas, aws (comma separated)'
+                  />
+                )}
+              />
+            ) : null}
+
+            {mode !== 'transfer' ? (
+              <View className='gap-2'>
+                <AppText size='sm' muted weight='medium'>
+                  Receipts / bills
+                </AppText>
+                <View className='flex-row gap-2'>
+                  <View className='flex-1'>
+                    <Button
+                      label='Gallery'
+                      variant='secondary'
+                      icon='images-outline'
+                      onPress={onPickReceipts}
+                    />
+                  </View>
+                  <View className='flex-1'>
+                    <Button
+                      label='Camera'
+                      variant='secondary'
+                      icon='camera-outline'
+                      onPress={onTakeReceipt}
+                    />
+                  </View>
+                </View>
+                {pendingImages.length ? (
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                    <View className='flex-row gap-2'>
+                      {pendingImages.map((path) => (
+                        <ReceiptThumb
+                          key={path}
+                          path={path}
+                          onPress={() =>
+                            setPendingImages((prev) =>
+                              prev.filter((p) => p !== path)
+                            )
+                          }
+                        />
+                      ))}
+                    </View>
+                  </ScrollView>
+                ) : (
+                  <AppText size='xs' muted>
+                    Multiple images per expense — stored on this device
+                  </AppText>
+                )}
+              </View>
+            ) : null}
+
+            <AppText size='xs' muted>
+              Currency: {currency}
+            </AppText>
+            <Button label='Save' onPress={save} loading={saving} />
+          </ScrollView>
+        </KeyboardAvoidingView>
       </View>
     </Modal>
   );

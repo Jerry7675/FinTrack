@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, Pressable, ScrollView, View } from 'react-native';
+import { Alert, Pressable, View } from 'react-native';
 
 import {
   AppText,
   Button,
   ConfirmDialog,
   Field,
+  FormScroll,
   ListRow,
   Screen,
   ScreenHeader,
@@ -52,10 +53,9 @@ export function DebtsScreen() {
 
   return (
     <Screen>
-      <ScrollView
+      <FormScroll
         contentContainerStyle={{
           paddingHorizontal: layout.gutter,
-          paddingBottom: 40,
         }}
       >
         <ScreenHeader title='Debts' />
@@ -99,7 +99,7 @@ export function DebtsScreen() {
             onPress={() => setPending(d.id)}
           />
         ))}
-      </ScrollView>
+      </FormScroll>
       <ConfirmDialog
         visible={pending !== null}
         title='Delete debt?'

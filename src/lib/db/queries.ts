@@ -1,3 +1,4 @@
+import { startOfMonth, startOfWeek, startOfYear } from 'date-fns';
 import { and, desc, eq, gte, isNull, like, lte, or, sql } from 'drizzle-orm';
 
 import { createId } from '@/lib/id';
@@ -562,6 +563,44 @@ export async function softDeleteBudget(database: AppDatabase, id: string) {
     .where(eq(budgets.id, id));
 }
 
+/** Sum expense amount for a budget's category (and optional account) in the current period. */
+export async function getBudgetSpend(
+  database: AppDatabase,
+  budget: {
+    categoryId: string;
+    accountId: string | null;
+    period: 'weekly' | 'monthly' | 'yearly';
+  }
+): Promise<number> {
+  const now = new Date();
+  let from: Date;
+  if (budget.period === 'weekly') {
+    from = startOfWeek(now, { weekStartsOn: 1 });
+  } else if (budget.period === 'yearly') {
+    from = startOfYear(now);
+  } else {
+    from = startOfMonth(now);
+  }
+
+  const conditions = [
+    isNull(transactions.deletedAt),
+    eq(transactions.type, 'expense'),
+    eq(transactions.categoryId, budget.categoryId),
+    gte(transactions.occurredAt, from),
+    lte(transactions.occurredAt, now),
+  ];
+  if (budget.accountId) {
+    conditions.push(eq(transactions.accountId, budget.accountId));
+  }
+
+  const rows = await database
+    .select({ amountMinor: transactions.amountMinor })
+    .from(transactions)
+    .where(and(...conditions));
+
+  return rows.reduce((sum, r) => sum + r.amountMinor, 0);
+}
+
 export async function listRecurring(database: AppDatabase) {
   return database
     .select()
@@ -579,7 +618,8 @@ export async function createRecurring(
     title: string;
     amount: number;
     currencyCode: string;
-    cadence: 'daily' | 'weekly' | 'monthly' | 'yearly';
+    cadence: 'daily' | 'weekly' | 'monthly' | 'yearly' | 'custom';
+    intervalDays?: number | null;
     nextDueAt: Date;
     note?: string;
   }
@@ -594,6 +634,7 @@ export async function createRecurring(
     amountMinor: toMinorUnits(input.amount, input.currencyCode),
     currencyCode: input.currencyCode,
     cadence: input.cadence,
+    intervalDays: input.intervalDays ?? null,
     nextDueAt: input.nextDueAt,
     note: input.note?.trim() || null,
     createdAt: new Date(),
@@ -647,6 +688,65 @@ export async function softDeleteGoal(database: AppDatabase, id: string) {
   await database
     .update(goals)
     .set({ deletedAt: new Date(), updatedAt: new Date() })
+    .where(eq(goals.id, id));
+}
+
+export async function addGoalContribution(
+  database: AppDatabase,
+  id: string,
+  amount: number,
+  currencyCode: string
+) {
+  const [row] = await database
+    .select()
+    .from(goals)
+    .where(and(eq(goals.id, id), isNull(goals.deletedAt)))
+    .limit(1);
+  if (!row) return;
+  const delta = toMinorUnits(amount, currencyCode);
+  await database
+    .update(goals)
+    .set({
+      currentMinor: Math.max(0, row.currentMinor + delta),
+      updatedAt: new Date(),
+    })
+    .where(eq(goals.id, id));
+}
+
+export async function updateGoal(
+  database: AppDatabase,
+  id: string,
+  patch: {
+    name?: string;
+    target?: number;
+    current?: number;
+    currencyCode?: string;
+    deadlineAt?: Date | null;
+  }
+) {
+  const [row] = await database
+    .select()
+    .from(goals)
+    .where(and(eq(goals.id, id), isNull(goals.deletedAt)))
+    .limit(1);
+  if (!row) return;
+  const currency = patch.currencyCode ?? row.currencyCode;
+  await database
+    .update(goals)
+    .set({
+      name: patch.name?.trim() ?? row.name,
+      targetMinor:
+        patch.target != null
+          ? toMinorUnits(patch.target, currency)
+          : row.targetMinor,
+      currentMinor:
+        patch.current != null
+          ? toMinorUnits(patch.current, currency)
+          : row.currentMinor,
+      deadlineAt:
+        patch.deadlineAt !== undefined ? patch.deadlineAt : row.deadlineAt,
+      updatedAt: new Date(),
+    })
     .where(eq(goals.id, id));
 }
 

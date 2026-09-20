@@ -7,6 +7,7 @@ import {
   Button,
   ConfirmDialog,
   Field,
+  FormScroll,
   Screen,
   SectionHeader,
   Select,
@@ -88,10 +89,9 @@ export function AccountsScreen() {
 
   return (
     <Screen>
-      <ScrollView
+      <FormScroll
         contentContainerStyle={{
           paddingHorizontal: layout.gutter,
-          paddingBottom: 40,
         }}
       >
         <AppText size='xl' weight='bold' className='mt-2'>
@@ -244,7 +244,7 @@ export function AccountsScreen() {
             </View>
           ))
         )}
-      </ScrollView>
+      </FormScroll>
 
       <ConfirmDialog
         visible={pendingDelete !== null}

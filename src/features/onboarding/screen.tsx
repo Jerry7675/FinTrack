@@ -1,13 +1,14 @@
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { ScrollView, View } from 'react-native';
+import { View } from 'react-native';
 
 import {
   AppText,
   Button,
   Chip,
   Field,
+  FormScroll,
   GoBack,
   Screen,
 } from '@/components/ui/primitives';
@@ -54,7 +55,7 @@ export function OnboardingScreen() {
 
   return (
     <Screen>
-      <ScrollView
+      <FormScroll
         contentContainerStyle={{
           paddingHorizontal: layout.gutter,
           paddingBottom: 48,
@@ -117,7 +118,7 @@ export function OnboardingScreen() {
             <Button label='Start tracking' onPress={finish} loading={busy} />
           </View>
         )}
-      </ScrollView>
+      </FormScroll>
     </Screen>
   );
 }

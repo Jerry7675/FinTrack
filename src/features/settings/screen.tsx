@@ -20,7 +20,10 @@ import { updateWidgetSnapshot } from '@/features/widgets/update';
 import { exportBackupJson, exportTransactionsCsv } from '@/lib/backup';
 import { db } from '@/lib/db/client';
 import {
+  getBudgetSpend,
+  listBudgets,
   listDebts,
+  listGoals,
   listRecurring,
   listSubscriptions,
   updateSettings,
@@ -34,6 +37,7 @@ import {
   notificationsAvailable,
   syncPlanningReminders,
 } from '@/lib/notifications';
+import { budgetStatus } from '@/lib/planning';
 import { useApp } from '@/providers/app-provider';
 
 const PIN_KEY = 'fintrack_pin';
@@ -56,12 +60,44 @@ export function SettingsScreen() {
     if (!settings?.remindersEnabled) return;
     let cancelled = false;
     (async () => {
-      const [recurring, subs, debts] = await Promise.all([
+      const [recurring, subs, debts, budgets, goals] = await Promise.all([
         listRecurring(db),
         listSubscriptions(db),
         listDebts(db),
+        listBudgets(db),
+        listGoals(db),
       ]);
       if (cancelled) return;
+
+      const budgetReminders: {
+        key: string;
+        title: string;
+        body: string;
+        dueAt: Date;
+      }[] = [];
+      for (const b of budgets) {
+        const spent = await getBudgetSpend(db, b);
+        const status = budgetStatus(spent, b.amountMinor);
+        if (status === 'approaching' || status === 'exceeded') {
+          budgetReminders.push({
+            key: `budget-${b.id}`,
+            title:
+              status === 'exceeded' ? 'Budget exceeded' : 'Budget check-in',
+            body: b.name,
+            dueAt: new Date(Date.now() + 60 * 60 * 1000),
+          });
+        }
+      }
+
+      const goalReminders = goals
+        .filter((g) => g.deadlineAt && g.deadlineAt.getTime() > Date.now())
+        .map((g) => ({
+          key: `goal-${g.id}`,
+          title: 'Goal deadline',
+          body: g.name,
+          dueAt: g.deadlineAt as Date,
+        }));
+
       await syncPlanningReminders([
         ...recurring.map((r) => ({
           key: `recurring-${r.id}`,
@@ -83,6 +119,8 @@ export function SettingsScreen() {
             body: d.name,
             dueAt: d.dueAt as Date,
           })),
+        ...budgetReminders,
+        ...goalReminders,
       ]);
     })();
     return () => {
@@ -257,7 +295,7 @@ export function SettingsScreen() {
         <SectionHeader title='Reminders' />
         <ListRow
           title='Local notifications'
-          subtitle='Due recurring, subscriptions, and debts'
+          subtitle='Due recurring, subscriptions, debts, budgets, and goals'
           onPress={toggleReminders}
           right={
             <AppText muted>{settings?.remindersEnabled ? 'On' : 'Off'}</AppText>

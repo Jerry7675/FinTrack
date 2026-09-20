@@ -1,12 +1,13 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ScrollView, View } from 'react-native';
+import { View } from 'react-native';
 
 import {
   AppText,
   Button,
   ConfirmDialog,
   Field,
+  FormScroll,
   GoBack,
   Screen,
   Select,
@@ -88,7 +89,7 @@ export function AccountDetailScreen() {
 
   return (
     <Screen>
-      <ScrollView
+      <FormScroll
         contentContainerStyle={{
           paddingHorizontal: layout.gutter,
           paddingBottom: 40,
@@ -124,7 +125,7 @@ export function AccountDetailScreen() {
             onPress={() => setConfirmDelete(true)}
           />
         </View>
-      </ScrollView>
+      </FormScroll>
       <ConfirmDialog
         visible={confirmDelete}
         title={`Remove ${account.name}?`}

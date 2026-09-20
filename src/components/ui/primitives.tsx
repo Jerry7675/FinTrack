@@ -5,15 +5,20 @@ import { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   type PressableProps,
+  ScrollView,
+  type ScrollViewProps,
   Text,
   TextInput,
   type TextInputProps,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Svg, { Circle } from 'react-native-svg';
 
 import { colors } from '@/constants/palette';
 import { resolveCategoryIcon } from '@/lib/categories/icons';
@@ -42,6 +47,35 @@ export function Screen({
         {children}
       </SafeAreaView>
     </View>
+  );
+}
+
+/** Keyboard-aware scroll container for forms so lower fields stay visible. */
+export function FormScroll({
+  children,
+  contentContainerStyle,
+  style,
+  ...rest
+}: ScrollViewProps) {
+  return (
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 0}
+    >
+      <ScrollView
+        keyboardShouldPersistTaps='handled'
+        keyboardDismissMode='on-drag'
+        contentContainerStyle={[
+          { paddingBottom: vs(80) },
+          contentContainerStyle,
+        ]}
+        style={style}
+        {...rest}
+      >
+        {children}
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -546,17 +580,20 @@ export function EmptyState({
 }
 
 export function IconButton(
-  props: PressableProps & { name: keyof typeof Ionicons.glyphMap }
+  props: PressableProps & {
+    name: keyof typeof Ionicons.glyphMap;
+    color?: string;
+  }
 ) {
   const c = useThemeColors();
-  const { name, ...rest } = props;
+  const { name, color, ...rest } = props;
   return (
     <Pressable
       hitSlop={8}
       className='h-10 w-10 items-center justify-center rounded-full'
       {...rest}
     >
-      <Ionicons name={name} size={scale(22)} color={c.ink} />
+      <Ionicons name={name} size={scale(22)} color={color ?? c.ink} />
     </Pressable>
   );
 }
@@ -671,6 +708,101 @@ export function Card({
       }}
     >
       {children}
+    </View>
+  );
+}
+
+export function ProgressBar({
+  progress,
+  color,
+  height = 8,
+}: {
+  progress: number;
+  color?: string;
+  height?: number;
+}) {
+  const c = useThemeColors();
+  const pct = Math.max(0, Math.min(1, progress));
+  return (
+    <View
+      style={{
+        height: vs(height),
+        borderRadius: vs(height),
+        backgroundColor: c.surfaceSunken,
+        overflow: 'hidden',
+      }}
+    >
+      <View
+        style={{
+          width: `${pct * 100}%`,
+          height: '100%',
+          borderRadius: vs(height),
+          backgroundColor: color ?? c.accent,
+        }}
+      />
+    </View>
+  );
+}
+
+/** Compact circular completion ring for goals on home / lists. */
+export function GoalRing({
+  progress,
+  size = 44,
+  label,
+  color,
+}: {
+  progress: number;
+  size?: number;
+  label?: string;
+  color?: string;
+}) {
+  const c = useThemeColors();
+  const dim = scale(size);
+  const stroke = Math.max(3, dim * 0.1);
+  const radius = (dim - stroke) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const pct = Math.max(0, Math.min(1, progress));
+  const offset = circumference * (1 - pct);
+  const strokeColor = color ?? c.accent;
+
+  return (
+    <View
+      style={{
+        width: dim,
+        height: dim,
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      <Svg width={dim} height={dim}>
+        <Circle
+          cx={dim / 2}
+          cy={dim / 2}
+          r={radius}
+          stroke={c.surfaceSunken}
+          strokeWidth={stroke}
+          fill='none'
+        />
+        <Circle
+          cx={dim / 2}
+          cy={dim / 2}
+          r={radius}
+          stroke={strokeColor}
+          strokeWidth={stroke}
+          fill='none'
+          strokeDasharray={`${circumference} ${circumference}`}
+          strokeDashoffset={offset}
+          strokeLinecap='round'
+          transform={`rotate(-90 ${dim / 2} ${dim / 2})`}
+        />
+      </Svg>
+      {label ? (
+        <View style={{ position: 'absolute' }}>
+          <AppText size='xs' weight='semibold'>
+            {label}
+          </AppText>
+        </View>
+      ) : null}
     </View>
   );
 }

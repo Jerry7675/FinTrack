@@ -1,38 +1,46 @@
-import { Text, VStack } from '@expo/ui/swift-ui';
-import { font } from '@expo/ui/swift-ui/modifiers';
+import {
+  endOfMonth,
+  endOfWeek,
+  endOfYear,
+  startOfMonth,
+  startOfWeek,
+  startOfYear,
+} from 'date-fns';
 import * as SecureStore from 'expo-secure-store';
-import { createWidget } from 'expo-widgets';
 
+import {
+  type BalanceWidgetProps,
+  balanceWidget,
+} from '@/features/widgets/FinTrackBalance';
 import { db } from '@/lib/db/client';
-import { getAccountBalance, listAccounts } from '@/lib/db/queries';
+import {
+  getAccountBalance,
+  getBudgetSpend,
+  listAccounts,
+  listBudgets,
+  listTransactions,
+} from '@/lib/db/queries';
 import { getSettings } from '@/lib/db/seed';
 import { formatMoney } from '@/lib/money';
 
-export type BalanceWidgetProps = {
-  label: string;
-  balance: string;
-  subtitle: string;
-};
-
 const SNAPSHOT_KEY = 'fintrack_widget_snapshot';
 
-export const balanceWidget = createWidget<BalanceWidgetProps>(
-  'FinTrackBalance',
-  (props) => {
-    'widget';
-    return (
-      <VStack spacing={4}>
-        <Text>{props.label || 'FinTrack'}</Text>
-        <Text modifiers={[font({ size: 22, weight: 'bold' })]}>
-          {props.balance || '—'}
-        </Text>
-        <Text modifiers={[font({ size: 12 })]}>
-          {props.subtitle || 'Open the app to refresh'}
-        </Text>
-      </VStack>
-    );
+function periodBounds(period: 'weekly' | 'monthly' | 'yearly'): {
+  from: Date;
+  to: Date;
+} {
+  const now = new Date();
+  if (period === 'weekly') {
+    return {
+      from: startOfWeek(now, { weekStartsOn: 1 }),
+      to: endOfWeek(now, { weekStartsOn: 1 }),
+    };
   }
-);
+  if (period === 'yearly') {
+    return { from: startOfYear(now), to: endOfYear(now) };
+  }
+  return { from: startOfMonth(now), to: endOfMonth(now) };
+}
 
 export async function updateWidgetSnapshot(): Promise<void> {
   try {
@@ -42,7 +50,7 @@ export async function updateWidgetSnapshot(): Promise<void> {
       accounts.find((a) => a.id === settings?.activeAccountId) ?? accounts[0];
 
     let balance = 0;
-    let label = 'FinTrack';
+    let label = 'Balance';
     let currency = settings?.defaultCurrency ?? 'USD';
 
     if (account) {
@@ -51,10 +59,43 @@ export async function updateWidgetSnapshot(): Promise<void> {
       currency = account.currencyCode;
     }
 
+    const month = periodBounds('monthly');
+    const monthTxns = await listTransactions(db, {
+      accountId: account?.id,
+      from: month.from,
+      to: month.to,
+      limit: 500,
+    });
+
+    let incomeMinor = 0;
+    let expenseMinor = 0;
+    for (const row of monthTxns) {
+      if (row.transaction.type === 'income') {
+        incomeMinor += row.transaction.amountMinor;
+      } else if (row.transaction.type === 'expense') {
+        expenseMinor += row.transaction.amountMinor;
+      }
+    }
+    const savedMinor = incomeMinor - expenseMinor;
+
+    const budgets = await listBudgets(db);
+    const budgetLines: string[] = [];
+    for (const b of budgets.slice(0, 2)) {
+      const spent = await getBudgetSpend(db, b);
+      budgetLines.push(
+        `${b.name}  ${formatMoney(spent, b.currencyCode)} / ${formatMoney(b.amountMinor, b.currencyCode)}`
+      );
+    }
+
     const props: BalanceWidgetProps = {
+      brand: 'FinTrack',
       label,
       balance: formatMoney(balance, currency),
-      subtitle: 'On-device balance',
+      income: formatMoney(incomeMinor, currency),
+      expenses: formatMoney(expenseMinor, currency),
+      saved: formatMoney(savedMinor, currency),
+      budgetLine1: budgetLines[0] ?? '',
+      budgetLine2: budgetLines[1] ?? '',
     };
 
     await SecureStore.setItemAsync(SNAPSHOT_KEY, JSON.stringify(props));
@@ -68,3 +109,5 @@ export async function updateWidgetSnapshot(): Promise<void> {
     // Non-fatal outside native widget environments.
   }
 }
+
+export type { BalanceWidgetProps };
