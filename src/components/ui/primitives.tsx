@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -541,6 +541,109 @@ export function ConfirmDialog({
                 variant='danger'
                 onPress={onConfirm}
               />
+            </View>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+export function PasswordDialog({
+  visible,
+  title,
+  message,
+  confirmLabel = 'Confirm',
+  minLength = 8,
+  onConfirm,
+  onCancel,
+}: {
+  visible: boolean;
+  title: string;
+  message: string;
+  confirmLabel?: string;
+  minLength?: number;
+  onConfirm: (password: string) => void;
+  onCancel: () => void;
+}) {
+  const c = useThemeColors();
+  const { colorScheme } = useApp();
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState<string | undefined>();
+  const bg =
+    colorScheme === 'dark' ? 'bg-surface-dark-sunken' : 'bg-surface-sunken';
+
+  useEffect(() => {
+    if (visible) {
+      setPassword('');
+      setError(undefined);
+    }
+  }, [visible]);
+
+  const submit = () => {
+    if (password.length < minLength) {
+      setError(`Password must be at least ${minLength} characters`);
+      return;
+    }
+    onConfirm(password);
+  };
+
+  return (
+    <Modal visible={visible} transparent animationType='fade'>
+      <View className='flex-1 items-center justify-center bg-black/55 px-8'>
+        <View
+          className='w-full rounded-3xl p-5'
+          style={{
+            backgroundColor: c.surfaceRaised,
+            gap: vs(12),
+            borderWidth: 1,
+            borderColor: c.line,
+          }}
+        >
+          <Text
+            style={{
+              color: c.ink,
+              fontSize: fontSize(17),
+              fontWeight: '600',
+            }}
+          >
+            {title}
+          </Text>
+          <Text
+            style={{
+              color: c.inkMuted,
+              fontSize: fontSize(15),
+              lineHeight: fontSize(22),
+            }}
+          >
+            {message}
+          </Text>
+          <TextInput
+            value={password}
+            onChangeText={(v) => {
+              setPassword(v);
+              setError(undefined);
+            }}
+            secureTextEntry
+            autoCapitalize='none'
+            autoCorrect={false}
+            placeholder='Password'
+            placeholderTextColor={c.inkMuted}
+            className={`rounded-2xl px-4 py-3.5 ${bg}`}
+            style={{ color: c.ink, fontSize: fontSize(15), minHeight: vs(48) }}
+            onSubmitEditing={submit}
+          />
+          {error ? (
+            <Text style={{ color: c.expense, fontSize: fontSize(13) }}>
+              {error}
+            </Text>
+          ) : null}
+          <View className='mt-2 flex-row gap-3'>
+            <View className='flex-1'>
+              <Button label='Cancel' variant='secondary' onPress={onCancel} />
+            </View>
+            <View className='flex-1'>
+              <Button label={confirmLabel} onPress={submit} />
             </View>
           </View>
         </View>

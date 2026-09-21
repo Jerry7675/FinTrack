@@ -3,6 +3,14 @@
     "name": "FinTrack",
     "slug": "fintech",
     "version": "1.0.0",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/f3766ccf-c364-44d1-86b4-b8605f2376a9",
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 10000
+    },
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "fintrack",

@@ -86,8 +86,8 @@ export function GoalsScreen() {
   const submitContribution = async () => {
     if (!contributeId) return;
     const value = Number.parseFloat(contributeAmount);
-    if (!Number.isFinite(value) || value === 0) {
-      Alert.alert('Enter a contribution amount');
+    if (!Number.isFinite(value) || value <= 0) {
+      Alert.alert('Enter a positive contribution amount');
       return;
     }
     const goal = items.find((g) => g.id === contributeId);

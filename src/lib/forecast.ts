@@ -1,6 +1,7 @@
 import { addDays, format, startOfDay } from 'date-fns';
 
 import type { Debt, RecurringTemplate, Subscription } from '@/lib/db/schema';
+import { advanceByCadence } from '@/lib/planning';
 
 export type ForecastEvent = {
   date: Date;
@@ -42,6 +43,17 @@ export function subscriptionAnnualMinor(s: Subscription): number {
   return Math.round(subscriptionMonthlyMinor(s) * 12);
 }
 
+function cadenceMinStepDays(
+  cadence: RecurringTemplate['cadence'] | Subscription['cadence'],
+  intervalDays?: number | null
+): number {
+  if (cadence === 'daily') return 1;
+  if (cadence === 'weekly') return 7;
+  if (cadence === 'monthly') return 28;
+  if (cadence === 'yearly') return 365;
+  return Math.max(1, intervalDays ?? 1);
+}
+
 /** Project cash flow from recurring templates, subscriptions, and debt dues. */
 export function buildCashFlowForecast(input: {
   startingBalanceMinor: number;
@@ -58,8 +70,10 @@ export function buildCashFlowForecast(input: {
 
   for (const r of input.recurring) {
     let cursor = startOfDay(r.nextDueAt);
+    const maxSteps =
+      Math.ceil(days / cadenceMinStepDays(r.cadence, r.intervalDays)) + 2;
     let guard = 0;
-    while (cursor.getTime() < until.getTime() && guard < 60) {
+    while (cursor.getTime() < until.getTime() && guard < maxSteps) {
       if (cursor.getTime() >= from.getTime()) {
         events.push({
           date: cursor,
@@ -69,19 +83,16 @@ export function buildCashFlowForecast(input: {
           source: 'recurring',
         });
       }
-      if (r.cadence === 'daily') cursor = addDays(cursor, 1);
-      else if (r.cadence === 'weekly') cursor = addDays(cursor, 7);
-      else if (r.cadence === 'monthly') cursor = addDays(cursor, 30);
-      else if (r.cadence === 'yearly') cursor = addDays(cursor, 365);
-      else cursor = addDays(cursor, Math.max(1, r.intervalDays ?? 1));
+      cursor = advanceByCadence(cursor, r.cadence, r.intervalDays);
       guard += 1;
     }
   }
 
   for (const s of input.subscriptions) {
     let cursor = startOfDay(s.nextBillingAt);
+    const maxSteps = Math.ceil(days / cadenceMinStepDays(s.cadence)) + 2;
     let guard = 0;
-    while (cursor.getTime() < until.getTime() && guard < 24) {
+    while (cursor.getTime() < until.getTime() && guard < maxSteps) {
       if (cursor.getTime() >= from.getTime()) {
         events.push({
           date: cursor,
@@ -91,9 +102,7 @@ export function buildCashFlowForecast(input: {
           source: 'subscription',
         });
       }
-      if (s.cadence === 'weekly') cursor = addDays(cursor, 7);
-      else if (s.cadence === 'yearly') cursor = addDays(cursor, 365);
-      else cursor = addDays(cursor, 30);
+      cursor = advanceByCadence(cursor, s.cadence);
       guard += 1;
     }
   }

@@ -10,6 +10,7 @@ import {
   Button,
   Chip,
   ListRow,
+  PasswordDialog,
   Screen,
   SectionHeader,
   Select,
@@ -22,6 +23,7 @@ import {
   exportEncryptedBackup,
   exportTransactionsCsv,
   importBackupFromText,
+  MIN_BACKUP_PASSWORD_LENGTH,
   pickAndImportTransactionsCsv,
   pickAndReadBackupFile,
 } from '@/lib/backup';
@@ -53,6 +55,10 @@ export function SettingsScreen() {
   const { settings, accounts, setTheme, setLockEnabled, refresh } = useApp();
   const { showToast } = useToast();
   const [busy, setBusy] = useState(false);
+  const [passwordPrompt, setPasswordPrompt] = useState<{
+    mode: 'export' | 'import';
+    pendingText?: string;
+  } | null>(null);
 
   const currencyOptions = useMemo(
     () =>
@@ -258,100 +264,87 @@ export function SettingsScreen() {
     }
   };
 
-  const onExportEncrypted = async () => {
-    Alert.prompt?.(
-      'Encrypted backup',
-      'Enter a password (min 4 characters)',
-      async (password) => {
-        if (!password || password.length < 4) {
-          showToast('Password too short', 'error');
-          return;
-        }
-        setBusy(true);
-        try {
-          await exportEncryptedBackup(password);
-          showToast('Encrypted backup exported', 'success');
-        } catch (e) {
-          showToast(`Export failed: ${String(e)}`, 'error');
-        } finally {
-          setBusy(false);
-        }
-      },
-      'secure-text'
-    );
-    if (!Alert.prompt) {
-      // Android fallback
-      Alert.alert(
-        'Encrypted backup',
-        'Enter password in the next step via export flow.',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Use default key',
-            onPress: async () => {
-              setBusy(true);
-              try {
-                await exportEncryptedBackup('fintrack');
-                showToast(
-                  'Exported with temporary password "fintrack" — change on next export',
-                  'success'
-                );
-              } catch (e) {
-                showToast(`Export failed: ${String(e)}`, 'error');
-              } finally {
-                setBusy(false);
-              }
-            },
-          },
-        ]
-      );
-    }
+  const onExportEncrypted = () => {
+    setPasswordPrompt({ mode: 'export' });
   };
 
   const onImportBackup = async () => {
     setBusy(true);
     try {
       const text = await pickAndReadBackupFile();
-      const runRestore = async (password?: string) => {
-        Alert.alert(
-          'Restore backup?',
-          'This replaces all FinTrack data on this device. Continue?',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            {
-              text: 'Restore',
-              style: 'destructive',
-              onPress: async () => {
-                try {
-                  await importBackupFromText(text, password);
-                  await refresh();
-                  showToast('Backup restored', 'success');
-                } catch (e) {
-                  showToast(`Restore failed: ${String(e)}`, 'error');
-                }
-              },
-            },
-          ]
-        );
-      };
-      if (text.trim().startsWith('FTENC1')) {
-        Alert.prompt?.(
-          'Encrypted backup',
-          'Enter password',
-          (password) => {
-            void runRestore(password);
-          },
-          'secure-text'
-        );
-        if (!Alert.prompt) {
-          await runRestore('fintrack');
-        }
-      } else {
-        await runRestore();
+      if (
+        text.trim().startsWith('FTENC2') ||
+        text.trim().startsWith('FTENC1')
+      ) {
+        setPasswordPrompt({ mode: 'import', pendingText: text });
+        return;
       }
+      Alert.alert(
+        'Restore backup?',
+        'This replaces all FinTrack data on this device. Continue?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Restore',
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                await importBackupFromText(text);
+                await refresh();
+                showToast('Backup restored', 'success');
+              } catch (e) {
+                showToast(`Restore failed: ${String(e)}`, 'error');
+              }
+            },
+          },
+        ]
+      );
     } catch (e) {
       if (String(e).includes('Cancelled')) return;
       showToast(`Import failed: ${String(e)}`, 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onPasswordConfirm = async (password: string) => {
+    const prompt = passwordPrompt;
+    setPasswordPrompt(null);
+    if (!prompt) return;
+    setBusy(true);
+    try {
+      if (prompt.mode === 'export') {
+        await exportEncryptedBackup(password);
+        showToast('Encrypted backup exported', 'success');
+        return;
+      }
+      Alert.alert(
+        'Restore backup?',
+        'This replaces all FinTrack data on this device. Continue?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Restore',
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                await importBackupFromText(prompt.pendingText ?? '', password);
+                await refresh();
+                showToast('Backup restored', 'success');
+              } catch (e) {
+                showToast(`Restore failed: ${String(e)}`, 'error');
+              }
+            },
+          },
+        ]
+      );
+    } catch (e) {
+      showToast(
+        prompt.mode === 'export'
+          ? `Export failed: ${String(e)}`
+          : `Restore failed: ${String(e)}`,
+        'error'
+      );
     } finally {
       setBusy(false);
     }
@@ -536,6 +529,21 @@ export function SettingsScreen() {
           />
         </View>
       </ScrollView>
+      <PasswordDialog
+        visible={passwordPrompt != null}
+        title='Encrypted backup'
+        message={
+          passwordPrompt?.mode === 'export'
+            ? `Choose a password (min ${MIN_BACKUP_PASSWORD_LENGTH} characters). You will need it to restore.`
+            : 'Enter the password used when this backup was exported.'
+        }
+        confirmLabel={passwordPrompt?.mode === 'export' ? 'Export' : 'Continue'}
+        minLength={MIN_BACKUP_PASSWORD_LENGTH}
+        onConfirm={(password) => {
+          void onPasswordConfirm(password);
+        }}
+        onCancel={() => setPasswordPrompt(null)}
+      />
     </Screen>
   );
 }

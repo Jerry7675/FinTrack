@@ -1,5 +1,9 @@
 import { isNull } from 'drizzle-orm';
 import {
+  AESEncryptionKey,
+  AESSealedData,
+  aesDecryptAsync,
+  aesEncryptAsync,
   CryptoDigestAlgorithm,
   digestStringAsync,
   getRandomBytesAsync,
@@ -27,7 +31,9 @@ import {
 import { fromMinorUnits } from '@/lib/money';
 
 export const BACKUP_SCHEMA_VERSION = 1;
-export const ENC_PREFIX = 'FTENC1';
+export const ENC_PREFIX = 'FTENC2';
+const LEGACY_ENC_PREFIX = 'FTENC1';
+export const MIN_BACKUP_PASSWORD_LENGTH = 8;
 
 export type BackupPayload = {
   schemaVersion: number;
@@ -113,7 +119,10 @@ export async function exportBackupJson(): Promise<string> {
   return path;
 }
 
-async function deriveKeyBytes(password: string, saltHex: string) {
+async function deriveKeyHex(
+  password: string,
+  saltHex: string
+): Promise<string> {
   let material = `${password}:${saltHex}`;
   for (let i = 0; i < 2000; i++) {
     material = await digestStringAsync(CryptoDigestAlgorithm.SHA256, material);
@@ -121,36 +130,25 @@ async function deriveKeyBytes(password: string, saltHex: string) {
   return material;
 }
 
-function xorHexPayload(utf8: string, keyHex: string): string {
-  const chars = [...utf8];
-  const out: string[] = [];
-  for (let i = 0; i < chars.length; i++) {
-    const code = chars[i].charCodeAt(0);
-    const keyByte = Number.parseInt(
-      keyHex.slice((i * 2) % 64, ((i * 2) % 64) + 2),
-      16
-    );
-    out.push(String.fromCharCode(code ^ (keyByte || 0)));
-  }
-  // base64 via btoa-compatible encoding
-  const bytes = out.map((c) => c.charCodeAt(0));
+function bytesToBase64(bytes: Uint8Array): string {
   let binary = '';
   for (const b of bytes) binary += String.fromCharCode(b);
   return globalThis.btoa(binary);
 }
 
-function decodeXorPayload(b64: string, keyHex: string): string {
+function base64ToBytes(b64: string): Uint8Array {
   const binary = globalThis.atob(b64);
-  const chars: string[] = [];
-  for (let i = 0; i < binary.length; i++) {
-    const code = binary.charCodeAt(i);
-    const keyByte = Number.parseInt(
-      keyHex.slice((i * 2) % 64, ((i * 2) % 64) + 2),
-      16
-    );
-    chars.push(String.fromCharCode(code ^ (keyByte || 0)));
-  }
-  return chars.join('');
+  const out = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
+  return out;
+}
+
+function utf8ToBytes(text: string): Uint8Array {
+  return new TextEncoder().encode(text);
+}
+
+function bytesToUtf8(bytes: Uint8Array): string {
+  return new TextDecoder().decode(bytes);
 }
 
 export async function encryptBackupPayload(
@@ -161,23 +159,45 @@ export async function encryptBackupPayload(
   const saltHex = Array.from(salt)
     .map((b) => b.toString(16).padStart(2, '0'))
     .join('');
-  const keyHex = await deriveKeyBytes(password, saltHex);
-  const cipher = xorHexPayload(JSON.stringify(payload), keyHex);
-  return `${ENC_PREFIX}.${saltHex}.${cipher}`;
+  const keyHex = await deriveKeyHex(password, saltHex);
+  const key = await AESEncryptionKey.import(keyHex, 'hex');
+  const plaintext = utf8ToBytes(JSON.stringify(payload));
+  const sealed = await aesEncryptAsync(plaintext, key);
+  const combined = await sealed.combined();
+  return `${ENC_PREFIX}.${saltHex}.${bytesToBase64(combined)}`;
 }
 
 export async function decryptBackupPayload(
   raw: string,
   password: string
 ): Promise<BackupPayload> {
-  const parts = raw.trim().split('.');
+  const trimmed = raw.trim();
+  if (trimmed.startsWith(`${LEGACY_ENC_PREFIX}.`)) {
+    throw new Error(
+      'This backup uses an outdated encryption format. Re-export from a newer FinTrack build.'
+    );
+  }
+  const parts = trimmed.split('.');
   if (parts.length !== 3 || parts[0] !== ENC_PREFIX) {
     throw new Error('Not an encrypted FinTrack backup');
   }
-  const [, saltHex, cipher] = parts;
-  const keyHex = await deriveKeyBytes(password, saltHex);
-  const json = decodeXorPayload(cipher, keyHex);
-  const payload = JSON.parse(json) as BackupPayload;
+  const [, saltHex, cipherB64] = parts;
+  const keyHex = await deriveKeyHex(password, saltHex);
+  const key = await AESEncryptionKey.import(keyHex, 'hex');
+  const sealed = AESSealedData.fromCombined(base64ToBytes(cipherB64));
+  let plaintext: Uint8Array;
+  try {
+    plaintext = await aesDecryptAsync(sealed, key);
+  } catch {
+    throw new Error('Wrong password or corrupted backup');
+  }
+  const json = bytesToUtf8(plaintext);
+  let payload: BackupPayload;
+  try {
+    payload = JSON.parse(json) as BackupPayload;
+  } catch {
+    throw new Error('Wrong password or corrupted backup');
+  }
   if (payload.schemaVersion !== BACKUP_SCHEMA_VERSION) {
     throw new Error(`Unsupported backup version: ${payload.schemaVersion}`);
   }
@@ -185,8 +205,11 @@ export async function decryptBackupPayload(
 }
 
 export async function exportEncryptedBackup(password: string): Promise<string> {
-  if (password.length < 4)
-    throw new Error('Password must be at least 4 characters');
+  if (password.length < MIN_BACKUP_PASSWORD_LENGTH) {
+    throw new Error(
+      `Password must be at least ${MIN_BACKUP_PASSWORD_LENGTH} characters`
+    );
+  }
   const payload = await buildBackupPayload();
   const enc = await encryptBackupPayload(payload, password);
   const base = FileSystem.cacheDirectory ?? FileSystem.documentDirectory;
@@ -218,7 +241,8 @@ export async function importBackupFromText(
   password?: string
 ): Promise<void> {
   let payload: BackupPayload;
-  if (text.trim().startsWith(ENC_PREFIX)) {
+  const trimmed = text.trim();
+  if (trimmed.startsWith(ENC_PREFIX) || trimmed.startsWith(LEGACY_ENC_PREFIX)) {
     if (!password) throw new Error('Password required for encrypted backup');
     payload = await decryptBackupPayload(text, password);
   } else {
@@ -327,6 +351,13 @@ export function parseTransactionsCsv(
   const noteIdx = idx(['note']);
   const dateIdx = idx(['occurred_at', 'date']);
   const currencyIdx = idx(['currency', 'currency_code']);
+
+  if (amountIdx < 0) {
+    throw new Error(
+      'CSV is missing a required amount column (amount or amount_minor)'
+    );
+  }
+
   const isMinor = header[amountIdx]?.includes('minor');
 
   const rows: CsvImportPreview['rows'] = [];
