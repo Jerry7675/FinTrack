@@ -606,11 +606,13 @@ export async function getBudgetSpend(
   }
 
   const rows = await database
-    .select({ amountMinor: transactions.amountMinor })
+    .select({
+      total: sql<number>`coalesce(sum(${transactions.amountMinor}), 0)`,
+    })
     .from(transactions)
     .where(and(...conditions));
 
-  return rows.reduce((sum, r) => sum + r.amountMinor, 0);
+  return Number(rows[0]?.total ?? 0);
 }
 
 export async function listRecurring(database: AppDatabase) {
@@ -709,6 +711,7 @@ export async function addGoalContribution(
   amount: number,
   currencyCode: string
 ) {
+  if (!(amount > 0)) return;
   const [row] = await database
     .select()
     .from(goals)
@@ -968,13 +971,16 @@ export async function getNetWorthSnapshot(database: AppDatabase) {
     currencyCode: string;
     amountMinor: number;
   }[] = [];
-  for (const a of accountRows) {
-    const bal = await getAccountBalance(database, a.id);
+  const balances = await Promise.all(
+    accountRows.map((a) => getAccountBalance(database, a.id))
+  );
+  for (let i = 0; i < accountRows.length; i++) {
+    const a = accountRows[i];
     assetLines.push({
       id: a.id,
       name: a.name,
       currencyCode: a.currencyCode,
-      amountMinor: bal,
+      amountMinor: balances[i],
     });
   }
 

@@ -14,6 +14,7 @@ import { LoadingScreen } from '@/components/ui/primitives';
 import { ToastProvider } from '@/components/ui/toast';
 import { colors } from '@/constants/palette';
 import { updateWidgetSnapshot } from '@/features/widgets/update';
+import { startUpdateChecks } from '@/lib/updates';
 import { AppProvider, useApp } from '@/providers/app-provider';
 
 SplashScreen.preventAutoHideAsync().catch(() => undefined);
@@ -58,6 +59,11 @@ function RootNavigator() {
       SplashScreen.hideAsync().catch(() => undefined);
       updateWidgetSnapshot().catch(() => undefined);
     }
+  }, [ready]);
+
+  useEffect(() => {
+    if (!ready) return;
+    return startUpdateChecks();
   }, [ready]);
 
   useEffect(() => {

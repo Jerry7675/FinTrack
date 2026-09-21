@@ -1,6 +1,7 @@
 import {
   addDays,
   addMonths,
+  addWeeks,
   addYears,
   differenceInCalendarDays,
   endOfMonth,
@@ -21,6 +22,8 @@ export type RecurringCadence =
   | 'monthly'
   | 'yearly'
   | 'custom';
+
+export type SubscriptionCadence = 'weekly' | 'monthly' | 'yearly';
 
 export function budgetPeriodBounds(period: BudgetPeriod, now = new Date()) {
   if (period === 'weekly') {
@@ -61,7 +64,12 @@ export function suggestedDailyLimit(
   return Math.max(0, Math.floor(remainingMinor / daysLeft));
 }
 
-/** Compute next due date from cadence + optional intervalDays rule. */
+/**
+ * Compute next due date from cadence + optional intervalDays rule.
+ * - weekly: intervalDays is weekday 0–6 (Sun–Sat)
+ * - monthly: intervalDays is day-of-month 1–28
+ * - custom: intervalDays is every N days
+ */
 export function computeNextDueAt(
   cadence: RecurringCadence,
   intervalDays: number | null | undefined,
@@ -74,7 +82,8 @@ export function computeNextDueAt(
   }
 
   if (cadence === 'weekly') {
-    const weekday = (intervalDays ?? base.getDay()) as
+    const raw = intervalDays ?? base.getDay();
+    const weekday = Math.min(6, Math.max(0, Math.trunc(raw))) as
       | 0
       | 1
       | 2
@@ -100,6 +109,26 @@ export function computeNextDueAt(
 
   const n = Math.max(1, intervalDays ?? 1);
   return addDays(base, n);
+}
+
+/**
+ * Advance an occurrence date by one cadence step (calendar-aware).
+ * Used by forecasts so projections match create/edit due-date math.
+ */
+export function advanceByCadence(
+  from: Date,
+  cadence: RecurringCadence | SubscriptionCadence,
+  intervalDays?: number | null
+): Date {
+  const base = startOfDay(from);
+  if (cadence === 'daily') return addDays(base, 1);
+  if (cadence === 'weekly') return addWeeks(base, 1);
+  if (cadence === 'monthly') {
+    const day = Math.min(Math.max(intervalDays ?? base.getDate(), 1), 28);
+    return setDate(addMonths(base, 1), day);
+  }
+  if (cadence === 'yearly') return addYears(base, 1);
+  return addDays(base, Math.max(1, intervalDays ?? 1));
 }
 
 export function goalSuggestedMonthly(

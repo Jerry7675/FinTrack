@@ -157,7 +157,7 @@ export const recurringTemplates = sqliteTable('recurring_templates', {
   })
     .notNull()
     .default('monthly'),
-  /** Custom: every N days. Weekly: weekday 0–6. Monthly: day of month 1–31. */
+  /** Custom: every N days. Weekly: weekday 0–6. Monthly: day of month 1–28. */
   intervalDays: integer('interval_days'),
   nextDueAt: integer('next_due_at', { mode: 'timestamp_ms' }).notNull(),
   note: text('note'),
