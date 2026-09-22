@@ -1,7 +1,7 @@
 import { format } from 'date-fns';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
-import { Alert, ScrollView, View } from 'react-native';
+import { useCallback, useState } from 'react';
+import { Alert, Pressable, ScrollView, View } from 'react-native';
 
 import { ReceiptThumb } from '@/components/media/images';
 import {
@@ -12,8 +12,11 @@ import {
   Field,
   FormScroll,
   GoBack,
+  IconButton,
   Screen,
+  useThemeColors,
 } from '@/components/ui/primitives';
+import { useReloadOnFocus } from '@/hooks/use-reload-on-focus';
 import { db } from '@/lib/db/client';
 import {
   addAttachments,
@@ -36,7 +39,8 @@ import { useApp } from '@/providers/app-provider';
 
 export function TransactionDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { refresh } = useApp();
+  const { refresh, bumpData } = useApp();
+  const c = useThemeColors();
   const [row, setRow] = useState<Awaited<
     ReturnType<typeof getTransactionById>
   > | null>(null);
@@ -56,9 +60,7 @@ export function TransactionDetailScreen() {
     }
   }, [id]);
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  useReloadOnFocus(load);
 
   const addPhotos = async (fromCamera: boolean) => {
     if (!row) return;
@@ -107,24 +109,31 @@ export function TransactionDetailScreen() {
         }}
       >
         <GoBack />
-        <View className='mt-2 flex-row items-center gap-3'>
-          <CategoryGlyph
-            iconKey={row.category?.iconKey ?? 'other'}
-            color={row.category?.color ?? '#6B7280'}
-            size={48}
-          />
-          <View>
-            <AppText size='sm' muted>
-              {t.type} · {format(t.occurredAt, 'MMM d, yyyy')}
-            </AppText>
-            <AppText size='xl' weight='bold'>
-              {formatMoney(
-                t.type === 'expense' ? -t.amountMinor : t.amountMinor,
-                t.currencyCode,
-                { sign: true }
-              )}
-            </AppText>
+        <View className='mt-2 flex-row items-start justify-between'>
+          <View className='flex-1 flex-row items-center gap-3'>
+            <CategoryGlyph
+              iconKey={row.category?.iconKey ?? 'other'}
+              color={row.category?.color ?? '#6B7280'}
+              size={48}
+            />
+            <View className='flex-1'>
+              <AppText size='sm' muted>
+                {t.type} · {format(t.occurredAt, 'MMM d, yyyy')}
+              </AppText>
+              <AppText size='xl' weight='bold'>
+                {formatMoney(
+                  t.type === 'expense' ? -t.amountMinor : t.amountMinor,
+                  t.currencyCode,
+                  { sign: true }
+                )}
+              </AppText>
+            </View>
           </View>
+          <IconButton
+            name='trash-outline'
+            color={c.expense}
+            onPress={() => setConfirmDelete(true)}
+          />
         </View>
 
         <View className='mt-6 gap-3'>
@@ -133,6 +142,26 @@ export function TransactionDetailScreen() {
           <AppText size='sm' muted>
             Account: {row.account.name}
           </AppText>
+          {t.sourceType === 'recurring' || t.sourceType === 'subscription' ? (
+            <Pressable
+              onPress={() =>
+                router.push(
+                  t.sourceType === 'subscription'
+                    ? '/planning/subscriptions'
+                    : '/planning/recurring'
+                )
+              }
+              className='flex-row items-center gap-2 self-start rounded-full px-3 py-1.5'
+              style={{ backgroundColor: c.surfaceRaised }}
+            >
+              <AppText size='sm' weight='medium'>
+                {t.sourceType === 'subscription' ? 'Subscription' : 'Recurring'}
+              </AppText>
+              <AppText size='sm' muted>
+                · view plan
+              </AppText>
+            </Pressable>
+          ) : null}
 
           {t.type !== 'transfer' ? (
             <View className='gap-2'>
@@ -185,14 +214,10 @@ export function TransactionDetailScreen() {
                 title: title.trim(),
                 note: note.trim() || null,
               });
+              bumpData();
               await refresh();
               await load();
             }}
-          />
-          <Button
-            label='Delete'
-            variant='danger'
-            onPress={() => setConfirmDelete(true)}
           />
         </View>
       </FormScroll>
@@ -204,6 +229,7 @@ export function TransactionDetailScreen() {
         onConfirm={async () => {
           await softDeleteTransaction(db, t.id);
           setConfirmDelete(false);
+          bumpData();
           await refresh();
           router.back();
         }}

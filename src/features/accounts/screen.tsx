@@ -8,9 +8,11 @@ import {
   ConfirmDialog,
   Field,
   FormScroll,
+  IconButton,
   Screen,
   SectionHeader,
   Select,
+  useThemeColors,
 } from '@/components/ui/primitives';
 import { useToast } from '@/components/ui/toast';
 import { db } from '@/lib/db/client';
@@ -25,8 +27,10 @@ import { CURRENCIES } from '@/lib/money';
 import { useApp } from '@/providers/app-provider';
 
 export function AccountsScreen() {
-  const { groups, accounts, refresh, colorScheme, settings } = useApp();
+  const { groups, accounts, refresh, bumpData, colorScheme, settings } =
+    useApp();
   const { showToast } = useToast();
+  const c = useThemeColors();
   const [groupName, setGroupName] = useState('');
   const [ledgerName, setLedgerName] = useState('');
   const [ledgerGroupId, setLedgerGroupId] = useState('');
@@ -41,9 +45,9 @@ export function AccountsScreen() {
 
   const currencyOptions = useMemo(
     () =>
-      CURRENCIES.map((c) => ({
-        label: `${c.code} — ${c.name}`,
-        value: c.code,
+      CURRENCIES.map((cur) => ({
+        label: `${cur.code} — ${cur.name}`,
+        value: cur.code,
       })),
     []
   );
@@ -54,6 +58,7 @@ export function AccountsScreen() {
     setGroupName('');
     setShowCreateGroup(false);
     setLedgerGroupId(id);
+    bumpData();
     await refresh();
   };
 
@@ -72,6 +77,7 @@ export function AccountsScreen() {
     });
     setLedgerName('');
     setShowCreateLedger(false);
+    bumpData();
     await refresh();
     showToast('Account created', 'success');
   };
@@ -84,7 +90,9 @@ export function AccountsScreen() {
       await softDeleteAccount(db, pendingDelete.id);
     }
     setPendingDelete(null);
+    bumpData();
     await refresh();
+    showToast('Removed', 'success');
   };
 
   return (
@@ -181,7 +189,9 @@ export function AccountsScreen() {
               <SectionHeader
                 title={g.name}
                 action={
-                  <Pressable
+                  <IconButton
+                    name='trash-outline'
+                    color={c.expense}
                     onPress={() =>
                       setPendingDelete({
                         type: 'group',
@@ -189,11 +199,7 @@ export function AccountsScreen() {
                         name: g.name,
                       })
                     }
-                  >
-                    <AppText size='sm' className='text-expense'>
-                      Remove
-                    </AppText>
-                  </Pressable>
+                  />
                 }
               />
               {accounts
@@ -212,15 +218,15 @@ export function AccountsScreen() {
                         })
                       }
                     />
-                    <View className='mt-1 flex-row justify-end gap-4 px-1'>
-                      <Pressable
+                    <View className='mt-1 flex-row justify-end gap-1 px-1'>
+                      <IconButton
+                        name='create-outline'
+                        color={c.accent}
                         onPress={() => router.push(`/account/${a.id}`)}
-                      >
-                        <AppText size='sm' className='text-accent'>
-                          Edit currency
-                        </AppText>
-                      </Pressable>
-                      <Pressable
+                      />
+                      <IconButton
+                        name='trash-outline'
+                        color={c.expense}
                         onPress={() =>
                           setPendingDelete({
                             type: 'account',
@@ -228,11 +234,7 @@ export function AccountsScreen() {
                             name: a.name,
                           })
                         }
-                      >
-                        <AppText size='sm' className='text-expense'>
-                          Remove
-                        </AppText>
-                      </Pressable>
+                      />
                     </View>
                   </View>
                 ))}

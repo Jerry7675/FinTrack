@@ -13,6 +13,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { LoadingScreen } from '@/components/ui/primitives';
 import { ToastProvider } from '@/components/ui/toast';
 import { colors } from '@/constants/palette';
+import { PlanningCatchUp } from '@/features/planning/catch-up';
 import { updateWidgetSnapshot } from '@/features/widgets/update';
 import { startUpdateChecks } from '@/lib/updates';
 import { AppProvider, useApp } from '@/providers/app-provider';
@@ -93,6 +94,7 @@ function RootNavigator() {
 
   return (
     <ToastProvider>
+      <PlanningCatchUp />
       <Stack
         screenOptions={{
           headerShown: false,

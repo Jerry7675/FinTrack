@@ -1,4 +1,4 @@
-import { startOfMonth, startOfWeek, startOfYear } from 'date-fns';
+import { startOfDay, startOfMonth, startOfWeek, startOfYear } from 'date-fns';
 import {
   and,
   desc,
@@ -304,6 +304,8 @@ export async function createTransaction(
     note?: string;
     occurredAt?: Date;
     tagNames?: string[];
+    sourceType?: 'recurring' | 'subscription' | null;
+    sourceId?: string | null;
   }
 ) {
   const parsed = transactionInputSchema.parse({
@@ -330,6 +332,8 @@ export async function createTransaction(
     title: parsed.title.trim(),
     note: parsed.note?.trim() || null,
     occurredAt: input.occurredAt ?? new Date(),
+    sourceType: input.sourceType ?? null,
+    sourceId: input.sourceId ?? null,
     createdAt: new Date(),
     updatedAt: new Date(),
   });
@@ -634,11 +638,13 @@ export async function createRecurring(
     currencyCode: string;
     cadence: 'daily' | 'weekly' | 'monthly' | 'yearly' | 'custom';
     intervalDays?: number | null;
-    nextDueAt: Date;
+    nextDueAt?: Date;
     note?: string;
   }
 ) {
   const id = createId();
+  // Due today so the first charge posts immediately on create.
+  const due = startOfDay(new Date());
   await database.insert(recurringTemplates).values({
     id,
     accountId: input.accountId,
@@ -649,12 +655,27 @@ export async function createRecurring(
     currencyCode: input.currencyCode,
     cadence: input.cadence,
     intervalDays: input.intervalDays ?? null,
-    nextDueAt: input.nextDueAt,
+    nextDueAt: due,
     note: input.note?.trim() || null,
     createdAt: new Date(),
     updatedAt: new Date(),
   });
+  const { materializeNewPlanningItem } = await import(
+    '@/lib/planning/materialize'
+  );
+  await materializeNewPlanningItem(database, 'recurring', id);
   return id;
+}
+
+export async function setRecurringNextDue(
+  database: AppDatabase,
+  id: string,
+  nextDueAt: Date
+) {
+  await database
+    .update(recurringTemplates)
+    .set({ nextDueAt, updatedAt: new Date() })
+    .where(eq(recurringTemplates.id, id));
 }
 
 export async function softDeleteRecurring(database: AppDatabase, id: string) {
@@ -782,11 +803,12 @@ export async function createSubscription(
     amount: number;
     currencyCode: string;
     cadence: 'weekly' | 'monthly' | 'yearly';
-    nextBillingAt: Date;
+    nextBillingAt?: Date;
     note?: string;
   }
 ) {
   const id = createId();
+  const due = startOfDay(new Date());
   await database.insert(subscriptions).values({
     id,
     accountId: input.accountId,
@@ -795,12 +817,52 @@ export async function createSubscription(
     amountMinor: toMinorUnits(input.amount, input.currencyCode),
     currencyCode: input.currencyCode,
     cadence: input.cadence,
-    nextBillingAt: input.nextBillingAt,
+    nextBillingAt: due,
     note: input.note?.trim() || null,
     createdAt: new Date(),
     updatedAt: new Date(),
   });
+  const { materializeNewPlanningItem } = await import(
+    '@/lib/planning/materialize'
+  );
+  await materializeNewPlanningItem(database, 'subscription', id);
   return id;
+}
+
+export async function setSubscriptionNextBilling(
+  database: AppDatabase,
+  id: string,
+  nextBillingAt: Date
+) {
+  await database
+    .update(subscriptions)
+    .set({ nextBillingAt, updatedAt: new Date() })
+    .where(eq(subscriptions.id, id));
+}
+
+/** True if a non-deleted txn already exists for this source on the given calendar day. */
+export async function hasSourceTransactionOnDay(
+  database: AppDatabase,
+  sourceType: 'recurring' | 'subscription',
+  sourceId: string,
+  day: Date
+) {
+  const from = startOfDay(day);
+  const to = new Date(from.getTime() + 24 * 60 * 60 * 1000 - 1);
+  const rows = await database
+    .select({ id: transactions.id })
+    .from(transactions)
+    .where(
+      and(
+        isNull(transactions.deletedAt),
+        eq(transactions.sourceType, sourceType),
+        eq(transactions.sourceId, sourceId),
+        gte(transactions.occurredAt, from),
+        lte(transactions.occurredAt, to)
+      )
+    )
+    .limit(1);
+  return rows.length > 0;
 }
 
 export async function softDeleteSubscription(

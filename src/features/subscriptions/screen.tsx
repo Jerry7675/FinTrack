@@ -1,5 +1,5 @@
-import { addMonths, addWeeks, addYears, format } from 'date-fns';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { format } from 'date-fns';
+import { useCallback, useMemo, useState } from 'react';
 import { Alert, View } from 'react-native';
 
 import {
@@ -15,6 +15,7 @@ import {
   Select,
   useThemeColors,
 } from '@/components/ui/primitives';
+import { useReloadOnFocus } from '@/hooks/use-reload-on-focus';
 import { db } from '@/lib/db/client';
 import {
   createSubscription,
@@ -37,7 +38,7 @@ const CADENCE_OPTIONS = [
 ];
 
 export function SubscriptionsScreen() {
-  const { accounts, settings } = useApp();
+  const { accounts, settings, bumpData } = useApp();
   const c = useThemeColors();
   const [items, setItems] = useState<Subscription[]>([]);
   const [name, setName] = useState('');
@@ -51,9 +52,7 @@ export function SubscriptionsScreen() {
     setItems(await listSubscriptions(db));
   }, []);
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  useReloadOnFocus(load);
 
   const currency = settings?.defaultCurrency ?? 'USD';
 
@@ -69,13 +68,6 @@ export function SubscriptionsScreen() {
     return { monthly, annual };
   }, [items]);
 
-  const nextDue = (cad: typeof cadence) => {
-    const now = new Date();
-    if (cad === 'weekly') return addWeeks(now, 1);
-    if (cad === 'yearly') return addYears(now, 1);
-    return addMonths(now, 1);
-  };
-
   const add = async () => {
     const account =
       accounts.find((a) => a.id === settings?.activeAccountId) ?? accounts[0];
@@ -90,10 +82,10 @@ export function SubscriptionsScreen() {
       amount: value,
       currencyCode: account.currencyCode,
       cadence,
-      nextBillingAt: nextDue(cadence),
     });
     setName('');
     setAmount('');
+    bumpData();
     await load();
   };
 
@@ -102,7 +94,7 @@ export function SubscriptionsScreen() {
       <FormScroll contentContainerStyle={{ paddingHorizontal: layout.gutter }}>
         <ScreenHeader title='Subscriptions' />
         <AppText muted className='mt-1'>
-          Track renewals. Amounts are normalized to monthly and annual totals.
+          Charges post to your balance on create and on each billing date.
         </AppText>
 
         {items.length > 0 ? (
@@ -167,11 +159,12 @@ export function SubscriptionsScreen() {
       <ConfirmDialog
         visible={pending !== null}
         title='Delete subscription?'
-        message='Remove this subscription tracker.'
+        message='Remove this subscription. Past posted charges stay in your ledger.'
         onCancel={() => setPending(null)}
         onConfirm={async () => {
           if (pending) await softDeleteSubscription(db, pending);
           setPending(null);
+          bumpData();
           await load();
         }}
       />

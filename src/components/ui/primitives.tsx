@@ -701,6 +701,29 @@ export function IconButton(
   );
 }
 
+/** Shared destructive / edit / close icon actions used across screens. */
+export function IconAction({
+  action,
+  onPress,
+  color,
+}: {
+  action: 'edit' | 'delete' | 'close';
+  onPress?: () => void;
+  color?: string;
+}) {
+  const c = useThemeColors();
+  const name =
+    action === 'edit'
+      ? 'create-outline'
+      : action === 'delete'
+        ? 'trash-outline'
+        : 'close-outline';
+  const tone =
+    color ??
+    (action === 'delete' ? c.expense : action === 'edit' ? c.accent : c.ink);
+  return <IconButton name={name} color={tone} onPress={onPress} />;
+}
+
 export function SectionHeader({
   title,
   action,

@@ -86,12 +86,18 @@ export const transactions = sqliteTable(
     note: text('note'),
     occurredAt: integer('occurred_at', { mode: 'timestamp_ms' }).notNull(),
     transferId: text('transfer_id'),
+    /** Provenance for auto-posted planning items. */
+    sourceType: text('source_type', {
+      enum: ['recurring', 'subscription'],
+    }),
+    sourceId: text('source_id'),
     ...timestamps,
   },
   (t) => [
     index('tx_account_occurred_idx').on(t.accountId, t.occurredAt),
     index('tx_title_idx').on(t.title),
     index('tx_transfer_idx').on(t.transferId),
+    index('tx_source_idx').on(t.sourceType, t.sourceId),
   ]
 );
 

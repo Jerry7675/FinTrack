@@ -16,6 +16,7 @@ import {
   Select,
   useThemeColors,
 } from '@/components/ui/primitives';
+import { useReloadOnFocus } from '@/hooks/use-reload-on-focus';
 import { db } from '@/lib/db/client';
 import {
   createRecurring,
@@ -26,7 +27,7 @@ import {
 import type { Category, RecurringTemplate } from '@/lib/db/schema';
 import { layout } from '@/lib/layout';
 import { formatMoney } from '@/lib/money';
-import { computeNextDueAt, type RecurringCadence } from '@/lib/planning';
+import type { RecurringCadence } from '@/lib/planning';
 import { useApp } from '@/providers/app-provider';
 
 const CADENCE_OPTIONS = [
@@ -48,7 +49,7 @@ const WEEKDAYS = [
 ];
 
 export function RecurringScreen() {
-  const { accounts, settings } = useApp();
+  const { accounts, settings, bumpData } = useApp();
   const c = useThemeColors();
   const [items, setItems] = useState<RecurringTemplate[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -84,9 +85,7 @@ export function RecurringScreen() {
     setItems(await listRecurring(db));
   }, []);
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  useReloadOnFocus(load);
 
   useEffect(() => {
     const defaultAccount = settings?.activeAccountId || accounts[0]?.id || '';
@@ -124,7 +123,6 @@ export function RecurringScreen() {
       return;
     }
     const intervalDays = resolveIntervalDays();
-    const nextDueAt = computeNextDueAt(cadence, intervalDays);
     await createRecurring(db, {
       accountId: account.id,
       categoryId: categoryId || null,
@@ -134,10 +132,10 @@ export function RecurringScreen() {
       currencyCode: account.currencyCode,
       cadence,
       intervalDays,
-      nextDueAt,
     });
     setTitle('');
     setAmount('');
+    bumpData();
     await load();
   };
 
@@ -169,7 +167,7 @@ export function RecurringScreen() {
       >
         <ScreenHeader title='Recurring' />
         <AppText muted className='mt-1'>
-          Templates only — FinTrack never auto-pays. Confirm when due.
+          Posts to your balance automatically on create and on each due date.
         </AppText>
         <View className='mt-4 gap-3'>
           <Field label='Title' value={title} onChangeText={setTitle} />
@@ -279,6 +277,7 @@ export function RecurringScreen() {
         onConfirm={async () => {
           if (pending) await softDeleteRecurring(db, pending);
           setPending(null);
+          bumpData();
           await load();
         }}
       />

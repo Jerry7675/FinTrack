@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Alert, Pressable, View } from 'react-native';
 
 import {
@@ -14,6 +14,7 @@ import {
   ScreenHeader,
   useThemeColors,
 } from '@/components/ui/primitives';
+import { useReloadOnFocus } from '@/hooks/use-reload-on-focus';
 import { db } from '@/lib/db/client';
 import {
   createDebt,
@@ -27,7 +28,7 @@ import { formatMoney } from '@/lib/money';
 import { useApp } from '@/providers/app-provider';
 
 export function DebtsScreen() {
-  const { settings, colorScheme } = useApp();
+  const { settings, colorScheme, bumpData } = useApp();
   const c = useThemeColors();
   const [items, setItems] = useState<Debt[]>([]);
   const [name, setName] = useState('');
@@ -41,9 +42,7 @@ export function DebtsScreen() {
     setItems(await listDebts(db));
   }, []);
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  useReloadOnFocus(load);
 
   const add = async () => {
     const value = Number.parseFloat(amount);
@@ -59,6 +58,7 @@ export function DebtsScreen() {
     });
     setName('');
     setAmount('');
+    bumpData();
     await load();
   };
 
@@ -78,6 +78,7 @@ export function DebtsScreen() {
     );
     setPayId(null);
     setPayAmount('');
+    bumpData();
     await load();
   };
 
@@ -220,6 +221,7 @@ export function DebtsScreen() {
         onConfirm={async () => {
           if (pending) await softDeleteDebt(db, pending);
           setPending(null);
+          bumpData();
           await load();
         }}
       />

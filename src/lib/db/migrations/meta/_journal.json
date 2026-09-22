@@ -29,6 +29,13 @@
       "when": 1789920000000,
       "tag": "0003_phase2",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1789930000000,
+      "tag": "0004_txn_source",
+      "breakpoints": true
     }
   ]
 }

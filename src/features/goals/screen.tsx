@@ -1,5 +1,5 @@
 import { format, parse } from 'date-fns';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Alert, View } from 'react-native';
 
 import {
@@ -16,6 +16,7 @@ import {
   ScreenHeader,
   useThemeColors,
 } from '@/components/ui/primitives';
+import { useReloadOnFocus } from '@/hooks/use-reload-on-focus';
 import { db } from '@/lib/db/client';
 import {
   addGoalContribution,
@@ -30,7 +31,7 @@ import { goalSuggestedMonthly } from '@/lib/planning';
 import { useApp } from '@/providers/app-provider';
 
 export function GoalsScreen() {
-  const { settings } = useApp();
+  const { settings, bumpData } = useApp();
   const c = useThemeColors();
   const [items, setItems] = useState<Goal[]>([]);
   const [name, setName] = useState('');
@@ -45,9 +46,7 @@ export function GoalsScreen() {
     setItems(await listGoals(db));
   }, []);
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  useReloadOnFocus(load);
 
   const add = async () => {
     const value = Number.parseFloat(target);
@@ -80,6 +79,7 @@ export function GoalsScreen() {
     setTarget('');
     setStarting('');
     setDeadline('');
+    bumpData();
     await load();
   };
 
@@ -99,6 +99,7 @@ export function GoalsScreen() {
     );
     setContributeId(null);
     setContributeAmount('');
+    bumpData();
     await load();
   };
 
@@ -237,6 +238,7 @@ export function GoalsScreen() {
         onConfirm={async () => {
           if (pending) await softDeleteGoal(db, pending);
           setPending(null);
+          bumpData();
           await load();
         }}
       />

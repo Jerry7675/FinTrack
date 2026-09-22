@@ -21,7 +21,7 @@ import { layout } from '@/lib/layout';
 import { useApp } from '@/providers/app-provider';
 
 export function DashboardCustomizeScreen() {
-  const { settings, refresh } = useApp();
+  const { settings, refresh, bumpData } = useApp();
   const c = useThemeColors();
   const [cards, setCards] = useState<DashboardCardConfig[]>(() =>
     parseDashboardLayout(settings?.dashboardLayout)
@@ -60,6 +60,7 @@ export function DashboardCustomizeScreen() {
         dashboardLayout: serializeDashboardLayout(cards),
       });
       await refresh();
+      bumpData();
     } finally {
       setSaving(false);
     }
@@ -72,6 +73,7 @@ export function DashboardCustomizeScreen() {
       dashboardLayout: serializeDashboardLayout(def),
     });
     await refresh();
+    bumpData();
   };
 
   return (

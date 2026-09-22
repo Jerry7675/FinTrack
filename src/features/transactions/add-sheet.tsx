@@ -9,6 +9,7 @@ import {
   ScrollView,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { z } from 'zod';
 
 import { ReceiptThumb } from '@/components/media/images';
@@ -18,6 +19,7 @@ import {
   CategoryGlyph,
   Chip,
   Field,
+  IconButton,
   Select,
 } from '@/components/ui/primitives';
 import { useToast } from '@/components/ui/toast';
@@ -53,8 +55,9 @@ const formSchema = z.object({
 type FormValues = z.infer<typeof formSchema>;
 
 export function AddTransactionSheet({ visible, onClose, onSaved }: Props) {
-  const { accounts, settings, colorScheme } = useApp();
+  const { accounts, settings, colorScheme, bumpData } = useApp();
   const { showToast } = useToast();
+  const insets = useSafeAreaInsets();
   const [categories, setCategories] = useState<Category[]>([]);
   const [saving, setSaving] = useState(false);
   const [pendingImages, setPendingImages] = useState<string[]>([]);
@@ -184,6 +187,7 @@ export function AddTransactionSheet({ visible, onClose, onSaved }: Props) {
       });
       setPendingImages([]);
       showToast('Saved', 'success');
+      bumpData();
       onSaved();
     } finally {
       setSaving(false);
@@ -200,7 +204,10 @@ export function AddTransactionSheet({ visible, onClose, onSaved }: Props) {
         className={`flex-1 ${
           colorScheme === 'dark' ? 'bg-surface-dark' : 'bg-surface'
         }`}
-        style={{ paddingHorizontal: layout.gutter, paddingTop: 16 }}
+        style={{
+          paddingHorizontal: layout.gutter,
+          paddingTop: insets.top + 8,
+        }}
       >
         <KeyboardAvoidingView
           style={{ flex: 1 }}
@@ -211,9 +218,7 @@ export function AddTransactionSheet({ visible, onClose, onSaved }: Props) {
             <AppText size='xl' weight='bold'>
               Add
             </AppText>
-            <Pressable onPress={onClose}>
-              <AppText muted>Close</AppText>
-            </Pressable>
+            <IconButton name='close-outline' onPress={onClose} />
           </View>
 
           <View className='mb-4 flex-row gap-2'>

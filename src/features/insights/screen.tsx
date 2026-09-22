@@ -6,7 +6,7 @@ import {
   startOfYear,
   subDays,
 } from 'date-fns';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 
 import { ActivityCalendar } from '@/components/charts/calendar';
@@ -28,6 +28,7 @@ import {
   useThemeColors,
 } from '@/components/ui/primitives';
 import { characters } from '@/constants/characters';
+import { useReloadOnFocus } from '@/hooks/use-reload-on-focus';
 import { db } from '@/lib/db/client';
 import { listRecurring, listTransactions } from '@/lib/db/queries';
 import { layout } from '@/lib/layout';
@@ -105,9 +106,7 @@ export function InsightsScreen() {
     );
   }, [account, settings?.activeGroupId, bounds]);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  useReloadOnFocus(load);
 
   const expenses = txns.filter((t) => t.transaction.type === 'expense');
   const income = txns.filter((t) => t.transaction.type === 'income');

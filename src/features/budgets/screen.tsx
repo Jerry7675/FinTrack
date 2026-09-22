@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Alert, View } from 'react-native';
 
 import {
@@ -15,6 +15,7 @@ import {
   Select,
   useThemeColors,
 } from '@/components/ui/primitives';
+import { useReloadOnFocus } from '@/hooks/use-reload-on-focus';
 import { db } from '@/lib/db/client';
 import {
   createBudget,
@@ -43,7 +44,7 @@ const PERIOD_OPTIONS = [
 ];
 
 export function BudgetsScreen() {
-  const { settings, refresh } = useApp();
+  const { settings, refresh, bumpData } = useApp();
   const c = useThemeColors();
   const [items, setItems] = useState<BudgetRow[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -74,9 +75,7 @@ export function BudgetsScreen() {
     setItems(withSpend);
   }, []);
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  useReloadOnFocus(load);
 
   const add = async () => {
     const value = Number.parseFloat(amount);
@@ -93,6 +92,7 @@ export function BudgetsScreen() {
     });
     setName('');
     setAmount('');
+    bumpData();
     await load();
     await refresh();
   };
@@ -205,6 +205,7 @@ export function BudgetsScreen() {
         onConfirm={async () => {
           if (pending) await softDeleteBudget(db, pending);
           setPending(null);
+          bumpData();
           await load();
         }}
       />

@@ -27,6 +27,9 @@ type AppContextValue = {
   colorScheme: 'light' | 'dark';
   unlocked: boolean;
   setUnlocked: (value: boolean) => void;
+  /** Increments when money/planning data changes so screens can refetch. */
+  dataRevision: number;
+  bumpData: () => void;
   refresh: () => Promise<void>;
   setTheme: (theme: ThemePreference) => Promise<void>;
   setActiveScope: (input: {
@@ -47,6 +50,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [seeded, setSeeded] = useState(false);
   const [unlocked, setUnlocked] = useState(false);
+  const [dataRevision, setDataRevision] = useState(0);
+
+  const bumpData = useCallback(() => {
+    setDataRevision((n) => n + 1);
+  }, []);
 
   const refresh = useCallback(async () => {
     const [nextSettings, nextGroups, nextAccounts] = await Promise.all([
@@ -129,6 +137,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     colorScheme,
     unlocked,
     setUnlocked,
+    dataRevision,
+    bumpData,
     refresh,
     setTheme,
     setActiveScope,

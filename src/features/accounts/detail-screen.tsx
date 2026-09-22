@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { View } from 'react-native';
 
 import {
@@ -9,10 +9,13 @@ import {
   Field,
   FormScroll,
   GoBack,
+  IconButton,
   Screen,
   Select,
+  useThemeColors,
 } from '@/components/ui/primitives';
 import { useToast } from '@/components/ui/toast';
+import { useReloadOnFocus } from '@/hooks/use-reload-on-focus';
 import { db } from '@/lib/db/client';
 import {
   getAccountBalance,
@@ -27,8 +30,9 @@ import { useApp } from '@/providers/app-provider';
 
 export function AccountDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { refresh } = useApp();
+  const { refresh, bumpData } = useApp();
   const { showToast } = useToast();
+  const c = useThemeColors();
   const [account, setAccount] = useState<Account | null>(null);
   const [balance, setBalance] = useState(0);
   const [name, setName] = useState('');
@@ -38,9 +42,9 @@ export function AccountDetailScreen() {
 
   const currencyOptions = useMemo(
     () =>
-      CURRENCIES.map((c) => ({
-        label: `${c.code} — ${c.name}`,
-        value: c.code,
+      CURRENCIES.map((cur) => ({
+        label: `${cur.code} — ${cur.name}`,
+        value: cur.code,
       })),
     []
   );
@@ -54,9 +58,7 @@ export function AccountDetailScreen() {
     if (row) setBalance(await getAccountBalance(db, row.id));
   }, [id]);
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  useReloadOnFocus(load);
 
   if (!account) {
     return (
@@ -77,6 +79,7 @@ export function AccountDetailScreen() {
         name: name.trim(),
         currencyCode,
       });
+      bumpData();
       await refresh();
       await load();
       showToast('Account updated', 'success');
@@ -95,7 +98,14 @@ export function AccountDetailScreen() {
           paddingBottom: 40,
         }}
       >
-        <GoBack />
+        <View className='flex-row items-center justify-between'>
+          <GoBack />
+          <IconButton
+            name='trash-outline'
+            color={c.expense}
+            onPress={() => setConfirmDelete(true)}
+          />
+        </View>
         <AppText size='sm' muted>
           Balance
         </AppText>
@@ -118,11 +128,7 @@ export function AccountDetailScreen() {
             label={saving ? 'Saving…' : 'Save changes'}
             onPress={onSave}
             disabled={saving}
-          />
-          <Button
-            label='Remove account'
-            variant='danger'
-            onPress={() => setConfirmDelete(true)}
+            icon='create-outline'
           />
         </View>
       </FormScroll>
@@ -134,6 +140,7 @@ export function AccountDetailScreen() {
         onConfirm={async () => {
           await softDeleteAccount(db, account.id);
           setConfirmDelete(false);
+          bumpData();
           await refresh();
           showToast('Account removed', 'success');
           router.back();

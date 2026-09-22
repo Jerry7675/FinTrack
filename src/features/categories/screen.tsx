@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Pressable, View } from 'react-native';
 
 import {
@@ -14,6 +14,7 @@ import {
   useThemeColors,
 } from '@/components/ui/primitives';
 import { useToast } from '@/components/ui/toast';
+import { useReloadOnFocus } from '@/hooks/use-reload-on-focus';
 import { CATEGORY_ICONS } from '@/lib/categories/icons';
 import { db } from '@/lib/db/client';
 import {
@@ -39,7 +40,7 @@ const emptyDraft = (): Draft => ({
 });
 
 export function CategoriesScreen() {
-  const { colorScheme } = useApp();
+  const { colorScheme, bumpData } = useApp();
   const theme = useThemeColors();
   const { showToast } = useToast();
   const [items, setItems] = useState<Category[]>([]);
@@ -51,9 +52,7 @@ export function CategoriesScreen() {
     setItems(await listCategories(db));
   }, []);
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  useReloadOnFocus(load);
 
   const startEdit = (c: Category) => {
     setEditingId(c.id);
@@ -94,6 +93,7 @@ export function CategoriesScreen() {
         showToast('Category added', 'success');
       }
       cancelEdit();
+      bumpData();
       await load();
     } catch (e) {
       showToast(`Save failed: ${String(e)}`, 'error');
@@ -107,6 +107,7 @@ export function CategoriesScreen() {
       if (editingId === pendingDelete.id) cancelEdit();
       showToast('Category removed', 'success');
       setPendingDelete(null);
+      bumpData();
       await load();
     } catch (e) {
       showToast(`Remove failed: ${String(e)}`, 'error');
