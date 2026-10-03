@@ -264,6 +264,13 @@ describe('parseAmountToMinor - malformed thousands separators', () => {
     expect(parseAmountToMinor('+ $5', 'USD')).toBe(500);
     expect(parseAmountToMinor('+5 USD', 'USD')).toBe(500);
   });
+
+  it('rejects symbol on both sides or symbol plus code', () => {
+    expect(parseAmountToMinor('$5$', 'USD')).toBeNull();
+    expect(parseAmountToMinor('$5 USD', 'USD')).toBeNull();
+    expect(parseAmountToMinor('€10€', 'EUR')).toBeNull();
+    expect(parseAmountToMinor('USD 5 USD', 'USD')).toBeNull();
+  });
 });
 
 describe('formatMinorToDecimal', () => {
