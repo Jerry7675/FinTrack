@@ -22,7 +22,7 @@ import Svg, { Circle } from 'react-native-svg';
 
 import { colors } from '@/constants/palette';
 import { resolveCategoryIcon } from '@/lib/categories/icons';
-import { ensureContrast } from '@/lib/color';
+import { ensureContrast, withAlpha } from '@/lib/color';
 import { fontSize, scale, vs } from '@/lib/layout';
 import { useApp } from '@/providers/app-provider';
 
@@ -510,7 +510,7 @@ export function CategoryGlyph({
       style={{
         width: dim,
         height: dim,
-        backgroundColor: `${adjustedColor}22`,
+        backgroundColor: withAlpha(adjustedColor, '22'),
       }}
     >
       <Ionicons
