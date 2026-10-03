@@ -372,12 +372,17 @@ export function parseTransactionsCsv(
 
     let amount: number;
     if (isMinor) {
-      const rawAmount = Number.parseFloat(cols[amountIdx] ?? '');
-      if (!Number.isFinite(rawAmount)) {
+      const rawAmount = cols[amountIdx] ?? '';
+      if (!/^-?\d+$/.test(rawAmount.trim())) {
         skipped += 1;
         continue;
       }
-      amount = fromMinorUnits(Math.abs(Math.round(rawAmount)), currencyCode);
+      const parsedMinor = Number.parseInt(rawAmount, 10);
+      if (!Number.isFinite(parsedMinor) || !Number.isSafeInteger(parsedMinor)) {
+        skipped += 1;
+        continue;
+      }
+      amount = fromMinorUnits(Math.abs(parsedMinor), currencyCode);
     } else {
       const amountStr = cols[amountIdx] ?? '';
       const amountMinor = parseAmountToMinor(amountStr, currencyCode);

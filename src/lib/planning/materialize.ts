@@ -12,7 +12,6 @@ import {
   setSubscriptionNextBilling,
 } from '@/lib/db/queries';
 import type { RecurringTemplate, Subscription } from '@/lib/db/schema';
-import { fromMinorUnits } from '@/lib/money';
 import { advanceByCadence, budgetStatus } from '@/lib/planning';
 
 const MAX_STEPS_PER_ITEM = 36;
@@ -59,7 +58,7 @@ async function postRecurringOccurrence(
     accountId: template.accountId,
     categoryId: template.categoryId,
     type: template.type,
-    amount: fromMinorUnits(template.amountMinor, template.currencyCode),
+    amountMinor: template.amountMinor,
     currencyCode: template.currencyCode,
     title: template.title,
     note: template.note ?? undefined,
@@ -104,7 +103,7 @@ async function postSubscriptionOccurrence(
     accountId: sub.accountId,
     categoryId: sub.categoryId,
     type: 'expense',
-    amount: fromMinorUnits(sub.amountMinor, sub.currencyCode),
+    amountMinor: sub.amountMinor,
     currencyCode: sub.currencyCode,
     title: sub.name,
     note: sub.note ?? undefined,
