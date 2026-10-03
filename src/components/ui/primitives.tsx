@@ -83,15 +83,21 @@ export function AppText({
   children,
   className = '',
   muted,
+  secondary,
   size = 'base',
   weight = 'normal',
+  numeric,
+  maxScale,
   style,
 }: {
   children: React.ReactNode;
   className?: string;
   muted?: boolean;
+  secondary?: boolean;
   size?: 'xs' | 'sm' | 'base' | 'lg' | 'xl' | 'display';
   weight?: 'normal' | 'medium' | 'semibold' | 'bold';
+  numeric?: boolean;
+  maxScale?: number;
   style?: object;
 }) {
   const c = useThemeColors();
@@ -110,14 +116,18 @@ export function AppText({
     bold: '700' as const,
   };
 
+  const color = muted ? c.inkMuted : secondary ? c.inkSecondary : c.ink;
+
   return (
     <Text
       className={className}
+      maxFontSizeMultiplier={maxScale}
       style={{
         fontSize: sizes[size],
         fontWeight: weights[weight],
-        color: muted ? c.inkMuted : c.ink,
+        color,
         letterSpacing: size === 'display' ? -0.8 : 0,
+        fontVariant: numeric ? ['tabular-nums'] : undefined,
         ...style,
       }}
     >
@@ -132,6 +142,7 @@ export function Button({
   variant = 'primary',
   disabled,
   loading,
+  prominent,
   className = '',
   icon,
 }: {
@@ -140,6 +151,7 @@ export function Button({
   variant?: 'primary' | 'secondary' | 'danger' | 'ghost';
   disabled?: boolean;
   loading?: boolean;
+  prominent?: boolean;
   className?: string;
   icon?: keyof typeof Ionicons.glyphMap;
 }) {
@@ -154,12 +166,20 @@ export function Button({
   }[variant];
   const textColor =
     variant === 'primary'
-      ? colorScheme === 'dark'
-        ? '#0A0A0A'
-        : '#FFFFFF'
+      ? c.inkInverse
       : variant === 'danger'
-        ? '#FFFFFF'
+        ? c.inkInverse
         : c.ink;
+
+  const shadow = prominent && variant === 'primary' && !disabled && colorScheme === 'dark'
+    ? {
+        shadowColor: c.accent,
+        shadowOpacity: 0.3,
+        shadowRadius: 14,
+        shadowOffset: { width: 0, height: 4 },
+        elevation: 8,
+      }
+    : {};
 
   return (
     <Pressable
@@ -168,7 +188,7 @@ export function Button({
       className={`flex-row items-center justify-center gap-2 rounded-2xl px-5 py-3.5 ${styles} ${
         disabled ? 'opacity-40' : ''
       } ${className}`}
-      style={{ minHeight: vs(48) }}
+      style={{ minHeight: Math.max(44, vs(48)), ...shadow }}
     >
       {loading ? (
         <ActivityIndicator color={textColor} />
@@ -270,17 +290,25 @@ export function Field({
   const c = useThemeColors();
   const bg =
     colorScheme === 'dark' ? 'bg-surface-dark-sunken' : 'bg-surface-sunken';
+  const borderColor = error ? c.expense : c.lineStrong;
+
   return (
     <View className='gap-1.5'>
       {label ? (
-        <AppText size='sm' muted weight='medium'>
+        <AppText size='sm' secondary weight='medium'>
           {label}
         </AppText>
       ) : null}
       <TextInput
         placeholderTextColor={c.inkMuted}
         className={`rounded-2xl px-4 py-3.5 ${bg}`}
-        style={{ color: c.ink, fontSize: fontSize(15), minHeight: vs(48) }}
+        style={{
+          color: c.ink,
+          fontSize: fontSize(15),
+          minHeight: Math.max(44, vs(48)),
+          borderWidth: 1,
+          borderColor,
+        }}
         {...props}
       />
       {error ? (
@@ -318,19 +346,23 @@ export function Select({
   );
   const bg =
     colorScheme === 'dark' ? 'bg-surface-dark-sunken' : 'bg-surface-sunken';
-  const sheetBg = colorScheme === 'dark' ? c.surfaceRaised : c.surfaceRaised;
+  const sheetBg = c.surfaceOverlay;
 
   return (
     <View className='gap-1.5'>
       {label ? (
-        <AppText size='sm' muted weight='medium'>
+        <AppText size='sm' secondary weight='medium'>
           {label}
         </AppText>
       ) : null}
       <Pressable
         onPress={() => setOpen(true)}
         className={`flex-row items-center justify-between rounded-2xl px-4 py-3.5 ${bg}`}
-        style={{ minHeight: vs(48) }}
+        style={{
+          minHeight: Math.max(44, vs(48)),
+          borderWidth: 1,
+          borderColor: c.lineStrong,
+        }}
       >
         <Text
           style={{
@@ -466,20 +498,24 @@ export function CategoryGlyph({
   color: string;
   size?: number;
 }) {
+  const c = useThemeColors();
   const dim = scale(size);
+  const { ensureContrast } = require('@/lib/color');
+  const adjustedColor = ensureContrast(color, c.surfaceRaised, 3);
+
   return (
     <View
       className='items-center justify-center rounded-full'
       style={{
         width: dim,
         height: dim,
-        backgroundColor: `${color}22`,
+        backgroundColor: `${adjustedColor}22`,
       }}
     >
       <Ionicons
         name={resolveCategoryIcon(iconKey)}
         size={scale(size * 0.45)}
-        color={color}
+        color={adjustedColor}
       />
     </View>
   );
@@ -690,10 +726,12 @@ export function IconButton(
 ) {
   const c = useThemeColors();
   const { name, color, ...rest } = props;
+  const size = Math.max(44, scale(40));
   return (
     <Pressable
       hitSlop={8}
-      className='h-10 w-10 items-center justify-center rounded-full'
+      className='items-center justify-center rounded-full'
+      style={{ width: size, height: size }}
       {...rest}
     >
       <Ionicons name={name} size={scale(22)} color={color ?? c.ink} />
@@ -733,8 +771,8 @@ export function SectionHeader({
 }) {
   return (
     <View className='mb-2 mt-6 flex-row items-center justify-between'>
-      <AppText size='sm' muted weight='semibold'>
-        {title.toUpperCase()}
+      <AppText size='sm' secondary weight='semibold'>
+        {title}
       </AppText>
       {action}
     </View>
@@ -763,10 +801,11 @@ export function CharacterAvatar({
 }
 
 export function LoadingScreen() {
+  const c = useThemeColors();
   return (
     <View
       className='flex-1 items-center justify-center'
-      style={{ backgroundColor: '#0A0A0A' }}
+      style={{ backgroundColor: c.surface }}
     >
       <Image
         source={require('../../../assets/images/splash-icon.png')}
@@ -781,28 +820,40 @@ export function Chip({
   label,
   active,
   onPress,
+  icon,
 }: {
   label: string;
   active?: boolean;
   onPress?: () => void;
+  icon?: keyof typeof Ionicons.glyphMap;
 }) {
-  const { colorScheme } = useApp();
   const c = useThemeColors();
-  const activeFg = colorScheme === 'dark' ? '#0A0A0A' : '#FFFFFF';
   return (
     <Pressable
       onPress={onPress}
-      className='rounded-full px-3.5 py-2'
+      className='flex-row items-center gap-1.5 rounded-full px-3.5 py-2.5'
       style={{
-        backgroundColor: active ? c.accent : c.surfaceSunken,
+        backgroundColor: active ? c.accent : c.surfaceHigh,
+        minHeight: Math.max(44, scale(40)),
         borderWidth: active ? 0 : 1,
         borderColor: c.line,
       }}
     >
+      {icon ? (
+        <Ionicons
+          name={icon}
+          size={scale(16)}
+          color={active ? c.inkInverse : c.inkMuted}
+        />
+      ) : null}
+      {active ? (
+        <Ionicons name='checkmark' size={scale(14)} color={c.inkInverse} />
+      ) : null}
       <Text
         numberOfLines={1}
+        maxFontSizeMultiplier={1.3}
         style={{
-          color: active ? activeFg : c.ink,
+          color: active ? c.inkInverse : c.inkMuted,
           fontSize: fontSize(13),
           fontWeight: '600',
         }}
@@ -841,14 +892,24 @@ export function Card({
 export function ProgressBar({
   progress,
   color,
+  state,
   height = 8,
 }: {
   progress: number;
   color?: string;
+  state?: 'ok' | 'near' | 'over';
   height?: number;
 }) {
   const c = useThemeColors();
   const pct = Math.max(0, Math.min(1, progress));
+  const stateColor = state === 'ok'
+    ? c.income
+    : state === 'near'
+      ? c.warning
+      : state === 'over'
+        ? c.expense
+        : undefined;
+
   return (
     <View
       style={{
@@ -863,7 +924,7 @@ export function ProgressBar({
           width: `${pct * 100}%`,
           height: '100%',
           borderRadius: vs(height),
-          backgroundColor: color ?? c.accent,
+          backgroundColor: color ?? stateColor ?? c.accent,
         }}
       />
     </View>
