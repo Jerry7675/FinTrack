@@ -1,4 +1,4 @@
-import { contrastRatio, ensureContrast, luminance } from '@/lib/color';
+import { contrastRatio, ensureContrast } from '@/lib/color';
 
 // Helper to parse hex and compute contrast
 function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
@@ -45,6 +45,7 @@ describe('ensureContrast', () => {
   const DARK_CARD = '#181C24'; // surfaceRaised in dark theme
   const LIGHT_CARD = '#FFFFFF'; // surfaceRaised in light theme
   const MIN_RATIO = 3;
+  const TEXT_RATIO = 4.5;
 
   describe('post-rounding verification', () => {
     it('#000 on dark card (#181C24) meets minimum after rounding', () => {
@@ -62,7 +63,7 @@ describe('ensureContrast', () => {
     });
 
     it('#6A4C93 at 4.5:1 on dark card (was returning #9276b8 at 4.47)', () => {
-      const adjusted = ensureContrast('#6A4C93', DARK_CARD, 4.5);
+      const adjusted = ensureContrast('#6A4C93', DARK_CARD, TEXT_RATIO);
       const fg = hexToRgb(adjusted);
       const bg = hexToRgb(DARK_CARD);
 
@@ -71,12 +72,12 @@ describe('ensureContrast', () => {
 
       if (fg && bg) {
         const ratio = contrastRatio(fg, bg);
-        expect(ratio).toBeGreaterThanOrEqual(4.5);
+        expect(ratio).toBeGreaterThanOrEqual(TEXT_RATIO);
       }
     });
 
     it('#6A4C93 at 3.0:1 on dark card meets target after rounding', () => {
-      const adjusted = ensureContrast('#6A4C93', DARK_CARD, 3.0);
+      const adjusted = ensureContrast('#6A4C93', DARK_CARD, MIN_RATIO);
       const fg = hexToRgb(adjusted);
       const bg = hexToRgb(DARK_CARD);
 
@@ -85,7 +86,7 @@ describe('ensureContrast', () => {
 
       if (fg && bg) {
         const ratio = contrastRatio(fg, bg);
-        expect(ratio).toBeGreaterThanOrEqual(3.0);
+        expect(ratio).toBeGreaterThanOrEqual(MIN_RATIO);
       }
     });
   });
@@ -95,7 +96,7 @@ describe('ensureContrast', () => {
       '#E07A3D', // Food & Drink
       '#F4A261', // Entertainment
       '#00B4D8', // Travel
-      '#8B5CF6', // Contractors (actually was this one, not Investment)
+      '#8B5CF6', // Contractors
       '#F59E0B', // Gift
     ];
 
@@ -167,7 +168,7 @@ describe('ensureContrast', () => {
 
       if (fg && bg) {
         const ratio = contrastRatio(fg, bg);
-        expect(ratio).toBeGreaterThanOrEqual(MIN_RATIO - 0.02);
+        expect(ratio).toBeGreaterThanOrEqual(MIN_RATIO);
       }
     });
   });
@@ -212,73 +213,91 @@ describe('ensureContrast', () => {
   });
 
   describe('all default categories meet contrast in both themes', () => {
-    const DEFAULT_CATEGORY_COLORS = [
-      '#00B4D8',
-      '#00F59B',
-      '#0EA5E9',
-      '#14B8A6',
-      '#22C55E',
-      '#2A9D8F',
-      '#3D7AE0',
-      '#457B9D',
-      '#6366F1',
-      '#64748B',
-      '#6A4C93',
-      '#6B7280',
-      '#8B5CF6',
-      '#9B5DE5',
-      '#A78BFA',
-      '#E07A3D',
-      '#E63946',
-      '#EC4899',
-      '#F4A261',
-      '#F59E0B',
-    ];
+    const DEFAULT_CATEGORIES: Array<{ name: string; color: string }> =
+      require('@/lib/categories/icons').DEFAULT_CATEGORIES;
 
-    it.each(DEFAULT_CATEGORY_COLORS)(
-      '%s meets 3:1 on dark background',
-      (color) => {
-        const adjusted = ensureContrast(color, DARK_CARD, MIN_RATIO);
-        const fg = hexToRgb(adjusted);
-        const bg = hexToRgb(DARK_CARD);
+    describe('at 3:1 minimum for UI components', () => {
+      it.each(DEFAULT_CATEGORIES)(
+        '$name ($color) meets 3:1 on dark background (#181C24)',
+        ({ color }) => {
+          const adjusted = ensureContrast(color, DARK_CARD, MIN_RATIO);
+          const fg = hexToRgb(adjusted);
+          const bg = hexToRgb(DARK_CARD);
 
-        expect(fg).not.toBeNull();
-        expect(bg).not.toBeNull();
+          expect(fg).not.toBeNull();
+          expect(bg).not.toBeNull();
 
-        if (fg && bg) {
-          const ratio = contrastRatio(fg, bg);
-          expect(ratio).toBeGreaterThanOrEqual(MIN_RATIO - 0.02);
+          if (fg && bg) {
+            const ratio = contrastRatio(fg, bg);
+            expect(ratio).toBeGreaterThanOrEqual(MIN_RATIO);
+          }
         }
-      }
-    );
+      );
 
-    it.each(DEFAULT_CATEGORY_COLORS)(
-      '%s meets 3:1 on light background',
-      (color) => {
-        const adjusted = ensureContrast(color, LIGHT_CARD, MIN_RATIO);
-        const fg = hexToRgb(adjusted);
-        const bg = hexToRgb(LIGHT_CARD);
+      it.each(DEFAULT_CATEGORIES)(
+        '$name ($color) meets 3:1 on light background (#FFFFFF)',
+        ({ color }) => {
+          const adjusted = ensureContrast(color, LIGHT_CARD, MIN_RATIO);
+          const fg = hexToRgb(adjusted);
+          const bg = hexToRgb(LIGHT_CARD);
 
-        expect(fg).not.toBeNull();
-        expect(bg).not.toBeNull();
+          expect(fg).not.toBeNull();
+          expect(bg).not.toBeNull();
 
-        if (fg && bg) {
-          const ratio = contrastRatio(fg, bg);
-          expect(ratio).toBeGreaterThanOrEqual(MIN_RATIO - 0.02);
+          if (fg && bg) {
+            const ratio = contrastRatio(fg, bg);
+            expect(ratio).toBeGreaterThanOrEqual(MIN_RATIO);
+          }
         }
-      }
-    );
+      );
+    });
+
+    describe('at 4.5:1 for text-sized use', () => {
+      it.each(DEFAULT_CATEGORIES)(
+        '$name ($color) meets 4.5:1 on dark background (#181C24)',
+        ({ color }) => {
+          const adjusted = ensureContrast(color, DARK_CARD, TEXT_RATIO);
+          const fg = hexToRgb(adjusted);
+          const bg = hexToRgb(DARK_CARD);
+
+          expect(fg).not.toBeNull();
+          expect(bg).not.toBeNull();
+
+          if (fg && bg) {
+            const ratio = contrastRatio(fg, bg);
+            expect(ratio).toBeGreaterThanOrEqual(TEXT_RATIO);
+          }
+        }
+      );
+
+      it.each(DEFAULT_CATEGORIES)(
+        '$name ($color) meets 4.5:1 on light background (#FFFFFF)',
+        ({ color }) => {
+          const adjusted = ensureContrast(color, LIGHT_CARD, TEXT_RATIO);
+          const fg = hexToRgb(adjusted);
+          const bg = hexToRgb(LIGHT_CARD);
+
+          expect(fg).not.toBeNull();
+          expect(bg).not.toBeNull();
+
+          if (fg && bg) {
+            const ratio = contrastRatio(fg, bg);
+            expect(ratio).toBeGreaterThanOrEqual(TEXT_RATIO);
+          }
+        }
+      );
+    });
   });
 
   it('returns original color if it already meets contrast ratio', () => {
     const black = '#000000';
     const white = '#FFFFFF';
     // Black on white has very high contrast, should normalize to 6-digit but not adjust
-    const result = ensureContrast(black, white, 4.5);
+    const result = ensureContrast(black, white, TEXT_RATIO);
     const fg = hexToRgb(result);
     const bg = hexToRgb(white);
     if (fg && bg) {
-      expect(contrastRatio(fg, bg)).toBeGreaterThan(4.5);
+      expect(contrastRatio(fg, bg)).toBeGreaterThan(TEXT_RATIO);
     }
   });
 
@@ -290,7 +309,6 @@ describe('ensureContrast', () => {
 });
 
 describe('default category colors are unique', () => {
-  // Import actual categories to test - use dynamic import to get the real values
   const DEFAULT_CATEGORIES: Array<{ name: string; color: string }> =
     require('@/lib/categories/icons').DEFAULT_CATEGORIES;
 

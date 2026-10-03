@@ -48,8 +48,8 @@ export function ensureContrast(
 
     const ratio = contrastRatio(roundedRgb, bg);
 
-    if (ratio >= minRatio - 0.001) {
-      // This lightness passes (with tiny tolerance for floating point precision)
+    if (ratio >= minRatio) {
+      // This lightness passes
       if (bestL === null || Math.abs(testL - hsl.l) < Math.abs(bestL - hsl.l)) {
         bestL = testL;
       }
@@ -69,8 +69,33 @@ export function ensureContrast(
     }
   }
 
-  // If we found a passing lightness, use it
+  // If we found a passing lightness, refine it to ensure the rounded hex passes
   if (bestL !== null) {
+    const step = 1 / 255; // One step in RGB space
+    let currentL = bestL;
+    let attempts = 0;
+
+    // Step lightness until the rounded hex meets the minimum
+    while (attempts < 100) {
+      const testRgb = hslToRgb({ ...hsl, l: currentL });
+      const hexTest = rgbToHex(testRgb);
+      const roundedRgb = hexToRgb(hexTest);
+
+      if (!roundedRgb) break;
+
+      const ratio = contrastRatio(roundedRgb, bg);
+      if (ratio >= minRatio) {
+        return rgbToHex(testRgb, fgAlpha);
+      }
+
+      // Step toward passing (lighter for dark bg, darker for light bg)
+      currentL = shouldLighten
+        ? Math.min(1, currentL + step)
+        : Math.max(0, currentL - step);
+      attempts++;
+    }
+
+    // Fallback: return the best we found
     const adjusted = hslToRgb({ ...hsl, l: bestL });
     return rgbToHex(adjusted, fgAlpha);
   }
