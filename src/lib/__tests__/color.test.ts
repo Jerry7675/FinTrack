@@ -1,4 +1,8 @@
-import { contrastRatio, ensureContrast } from '@/lib/color';
+import { palette } from '@/constants/palette';
+import { contrastRatio, ensureContrast, withAlpha } from '@/lib/color';
+
+const DARK_CARD = palette.dark.surfaceRaised;
+const LIGHT_CARD = palette.light.surfaceRaised;
 
 // Helper to parse hex and compute contrast
 function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
@@ -42,24 +46,21 @@ function rgbToHsl(rgb: { r: number; g: number; b: number }): {
 }
 
 describe('ensureContrast', () => {
-  const DARK_CARD = '#181C24'; // surfaceRaised in dark theme
-  const LIGHT_CARD = '#FFFFFF'; // surfaceRaised in light theme
   const MIN_RATIO = 3;
   const TEXT_RATIO = 4.5;
 
   describe('post-rounding verification', () => {
-    it('#000 on dark card (#181C24) meets minimum after rounding', () => {
+    it('#000 on dark card meets minimum after rounding', () => {
       const adjusted = ensureContrast('#000', DARK_CARD, MIN_RATIO);
       const fg = hexToRgb(adjusted);
       const bg = hexToRgb(DARK_CARD);
 
       expect(fg).not.toBeNull();
       expect(bg).not.toBeNull();
+      if (!fg || !bg) return;
 
-      if (fg && bg) {
-        const ratio = contrastRatio(fg, bg);
-        expect(ratio).toBeGreaterThanOrEqual(MIN_RATIO);
-      }
+      const ratio = contrastRatio(fg, bg);
+      expect(ratio).toBeGreaterThanOrEqual(MIN_RATIO);
     });
 
     it('#6A4C93 at 4.5:1 on dark card (was returning #9276b8 at 4.47)', () => {
@@ -69,11 +70,10 @@ describe('ensureContrast', () => {
 
       expect(fg).not.toBeNull();
       expect(bg).not.toBeNull();
+      if (!fg || !bg) return;
 
-      if (fg && bg) {
-        const ratio = contrastRatio(fg, bg);
-        expect(ratio).toBeGreaterThanOrEqual(TEXT_RATIO);
-      }
+      const ratio = contrastRatio(fg, bg);
+      expect(ratio).toBeGreaterThanOrEqual(TEXT_RATIO);
     });
 
     it('#6A4C93 at 3.0:1 on dark card meets target after rounding', () => {
@@ -83,11 +83,10 @@ describe('ensureContrast', () => {
 
       expect(fg).not.toBeNull();
       expect(bg).not.toBeNull();
+      if (!fg || !bg) return;
 
-      if (fg && bg) {
-        const ratio = contrastRatio(fg, bg);
-        expect(ratio).toBeGreaterThanOrEqual(MIN_RATIO);
-      }
+      const ratio = contrastRatio(fg, bg);
+      expect(ratio).toBeGreaterThanOrEqual(MIN_RATIO);
     });
   });
 
@@ -97,7 +96,7 @@ describe('ensureContrast', () => {
       '#F4A261', // Entertainment
       '#00B4D8', // Travel
       '#8B5CF6', // Contractors
-      '#F59E0B', // Gift
+      '#F97316', // Gift
     ];
 
     it.each(FAILING_LIGHT_COLORS)(
@@ -109,11 +108,10 @@ describe('ensureContrast', () => {
 
         expect(fg).not.toBeNull();
         expect(bg).not.toBeNull();
+        if (!fg || !bg) return;
 
-        if (fg && bg) {
-          const ratio = contrastRatio(fg, bg);
-          expect(ratio).toBeGreaterThanOrEqual(MIN_RATIO);
-        }
+        const ratio = contrastRatio(fg, bg);
+        expect(ratio).toBeGreaterThanOrEqual(MIN_RATIO);
       }
     );
   });
@@ -126,11 +124,10 @@ describe('ensureContrast', () => {
 
       const fg = hexToRgb(adjusted);
       const bg = hexToRgb(DARK_CARD);
+      if (!fg || !bg) return;
 
-      if (fg && bg) {
-        const ratio = contrastRatio(fg, bg);
-        expect(ratio).toBeGreaterThanOrEqual(MIN_RATIO);
-      }
+      const ratio = contrastRatio(fg, bg);
+      expect(ratio).toBeGreaterThanOrEqual(MIN_RATIO);
     });
 
     it('expands #FFF correctly', () => {
@@ -165,11 +162,10 @@ describe('ensureContrast', () => {
 
       expect(fg).not.toBeNull();
       expect(bg).not.toBeNull();
+      if (!fg || !bg) return;
 
-      if (fg && bg) {
-        const ratio = contrastRatio(fg, bg);
-        expect(ratio).toBeGreaterThanOrEqual(MIN_RATIO);
-      }
+      const ratio = contrastRatio(fg, bg);
+      expect(ratio).toBeGreaterThanOrEqual(MIN_RATIO);
     });
   });
 
@@ -183,14 +179,13 @@ describe('ensureContrast', () => {
 
       expect(origRgb).not.toBeNull();
       expect(adjRgb).not.toBeNull();
+      if (!origRgb || !adjRgb) return;
 
-      if (origRgb && adjRgb) {
-        const origHsl = rgbToHsl(origRgb);
-        const adjHsl = rgbToHsl(adjRgb);
+      const origHsl = rgbToHsl(origRgb);
+      const adjHsl = rgbToHsl(adjRgb);
 
-        // Hue should be very close (within 5% of full range)
-        expect(Math.abs(origHsl.h - adjHsl.h)).toBeLessThan(0.05);
-      }
+      // Hue should be very close (within 5% of full range)
+      expect(Math.abs(origHsl.h - adjHsl.h)).toBeLessThan(0.05);
     });
 
     it('preserves hue for green #2A9D8F', () => {
@@ -202,13 +197,12 @@ describe('ensureContrast', () => {
 
       expect(origRgb).not.toBeNull();
       expect(adjRgb).not.toBeNull();
+      if (!origRgb || !adjRgb) return;
 
-      if (origRgb && adjRgb) {
-        const origHsl = rgbToHsl(origRgb);
-        const adjHsl = rgbToHsl(adjRgb);
+      const origHsl = rgbToHsl(origRgb);
+      const adjHsl = rgbToHsl(adjRgb);
 
-        expect(Math.abs(origHsl.h - adjHsl.h)).toBeLessThan(0.05);
-      }
+      expect(Math.abs(origHsl.h - adjHsl.h)).toBeLessThan(0.05);
     });
   });
 
@@ -218,7 +212,7 @@ describe('ensureContrast', () => {
 
     describe('at 3:1 minimum for UI components', () => {
       it.each(DEFAULT_CATEGORIES)(
-        '$name ($color) meets 3:1 on dark background (#181C24)',
+        '$name ($color) meets 3:1 on dark background',
         ({ color }) => {
           const adjusted = ensureContrast(color, DARK_CARD, MIN_RATIO);
           const fg = hexToRgb(adjusted);
@@ -226,16 +220,15 @@ describe('ensureContrast', () => {
 
           expect(fg).not.toBeNull();
           expect(bg).not.toBeNull();
+          if (!fg || !bg) return;
 
-          if (fg && bg) {
-            const ratio = contrastRatio(fg, bg);
-            expect(ratio).toBeGreaterThanOrEqual(MIN_RATIO);
-          }
+          const ratio = contrastRatio(fg, bg);
+          expect(ratio).toBeGreaterThanOrEqual(MIN_RATIO);
         }
       );
 
       it.each(DEFAULT_CATEGORIES)(
-        '$name ($color) meets 3:1 on light background (#FFFFFF)',
+        '$name ($color) meets 3:1 on light background',
         ({ color }) => {
           const adjusted = ensureContrast(color, LIGHT_CARD, MIN_RATIO);
           const fg = hexToRgb(adjusted);
@@ -243,18 +236,17 @@ describe('ensureContrast', () => {
 
           expect(fg).not.toBeNull();
           expect(bg).not.toBeNull();
+          if (!fg || !bg) return;
 
-          if (fg && bg) {
-            const ratio = contrastRatio(fg, bg);
-            expect(ratio).toBeGreaterThanOrEqual(MIN_RATIO);
-          }
+          const ratio = contrastRatio(fg, bg);
+          expect(ratio).toBeGreaterThanOrEqual(MIN_RATIO);
         }
       );
     });
 
     describe('at 4.5:1 for text-sized use', () => {
       it.each(DEFAULT_CATEGORIES)(
-        '$name ($color) meets 4.5:1 on dark background (#181C24)',
+        '$name ($color) meets 4.5:1 on dark background',
         ({ color }) => {
           const adjusted = ensureContrast(color, DARK_CARD, TEXT_RATIO);
           const fg = hexToRgb(adjusted);
@@ -262,16 +254,15 @@ describe('ensureContrast', () => {
 
           expect(fg).not.toBeNull();
           expect(bg).not.toBeNull();
+          if (!fg || !bg) return;
 
-          if (fg && bg) {
-            const ratio = contrastRatio(fg, bg);
-            expect(ratio).toBeGreaterThanOrEqual(TEXT_RATIO);
-          }
+          const ratio = contrastRatio(fg, bg);
+          expect(ratio).toBeGreaterThanOrEqual(TEXT_RATIO);
         }
       );
 
       it.each(DEFAULT_CATEGORIES)(
-        '$name ($color) meets 4.5:1 on light background (#FFFFFF)',
+        '$name ($color) meets 4.5:1 on light background',
         ({ color }) => {
           const adjusted = ensureContrast(color, LIGHT_CARD, TEXT_RATIO);
           const fg = hexToRgb(adjusted);
@@ -279,11 +270,10 @@ describe('ensureContrast', () => {
 
           expect(fg).not.toBeNull();
           expect(bg).not.toBeNull();
+          if (!fg || !bg) return;
 
-          if (fg && bg) {
-            const ratio = contrastRatio(fg, bg);
-            expect(ratio).toBeGreaterThanOrEqual(TEXT_RATIO);
-          }
+          const ratio = contrastRatio(fg, bg);
+          expect(ratio).toBeGreaterThanOrEqual(TEXT_RATIO);
         }
       );
     });
@@ -296,15 +286,51 @@ describe('ensureContrast', () => {
     const result = ensureContrast(black, white, TEXT_RATIO);
     const fg = hexToRgb(result);
     const bg = hexToRgb(white);
-    if (fg && bg) {
-      expect(contrastRatio(fg, bg)).toBeGreaterThan(TEXT_RATIO);
-    }
+    if (!fg || !bg) return;
+    expect(contrastRatio(fg, bg)).toBeGreaterThan(TEXT_RATIO);
   });
 
   it('falls back gracefully for impossible ratios', () => {
     const result = ensureContrast('#808080', '#808080', 10);
     expect(result).toBeTruthy();
-    expect(result.startsWith('#')).toBe(true);
+    expect(result).toMatch(/^#[0-9A-Fa-f]{6}$/);
+
+    // When neither black nor white can achieve the ratio, returns a valid hex
+    // (The function may return original or fallback to black/white based on best contrast)
+    expect(result.length).toBe(7);
+  });
+});
+
+describe('withAlpha', () => {
+  it('adds alpha to 6-digit hex', () => {
+    expect(withAlpha('#FF5733', '22')).toBe('#FF573322');
+  });
+
+  it('expands 3-digit hex and adds alpha', () => {
+    expect(withAlpha('#ABC', '22')).toBe('#AABBCC22');
+  });
+
+  it('strips existing alpha and replaces with new alpha', () => {
+    expect(withAlpha('#FF5733FF', '22')).toBe('#FF573322');
+    expect(withAlpha('#FF573380', 'AA')).toBe('#FF5733AA');
+  });
+
+  it('handles lowercase input', () => {
+    expect(withAlpha('#ff5733', '22')).toBe('#FF573322');
+  });
+
+  it('handles input without # prefix', () => {
+    expect(withAlpha('FF5733', '22')).toBe('#FF573322');
+  });
+
+  it('handles 3-digit shorthand', () => {
+    expect(withAlpha('#000', '22')).toBe('#00000022');
+    expect(withAlpha('#FFF', '22')).toBe('#FFFFFF22');
+  });
+
+  it('preserves uppercase in result', () => {
+    const result = withAlpha('#6a4c93', '22');
+    expect(result).toBe('#6A4C9322');
   });
 });
 
