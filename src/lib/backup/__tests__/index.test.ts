@@ -1,3 +1,5 @@
+import * as ExpoCrypto from 'expo-crypto';
+
 import {
   BACKUP_SCHEMA_VERSION,
   type BackupPayload,
@@ -106,9 +108,9 @@ expense,15.50,"Coffee ""Special""",Test,2024-03-15`;
     expect(result.rows[0].title).toBe('Coffee "Special"');
   });
 
-  // KNOWN BUG: CSV import takes absolute value of amounts, so "-15.50" becomes 15.50.
-  // This is incorrect - negative amounts should be rejected or handled properly.
-  // TODO: Fix CSV parser to reject or properly handle negative amount values.
+  // Pins current parser behaviour: amounts are parsed via parseAmountToMinor, which
+  // rejects invalid negatives but still accepts signed values that become |minor|.
+  // Intended product behaviour is to reject negatives or preserve sign — not yet enforced.
   it('takes absolute value of amounts', () => {
     const csv = `type,amount,title,date
 expense,-15.50,Coffee,2024-03-15
@@ -226,6 +228,13 @@ describe('encryptBackupPayload', () => {
     expect(encrypted1).not.toBe(encrypted2);
   });
 
+  it('runs repeated SHA-256 digest rounds when deriving keys', async () => {
+    const digest = ExpoCrypto.digestStringAsync as jest.Mock;
+    digest.mockClear();
+    await encryptBackupPayload(samplePayload, 'test-password-123');
+    expect(digest).toHaveBeenCalledTimes(2000);
+  });
+
   it('encrypts and decrypts correctly', async () => {
     const password = 'test-password-123';
     const encrypted = await encryptBackupPayload(samplePayload, password);
@@ -237,35 +246,58 @@ describe('encryptBackupPayload', () => {
 });
 
 describe('decryptBackupPayload', () => {
-  it('throws error for invalid format', async () => {
+  const samplePayload: BackupPayload = {
+    schemaVersion: BACKUP_SCHEMA_VERSION,
+    exportedAt: new Date().toISOString(),
+    data: {
+      accountGroups: [],
+      accounts: [],
+      categories: [],
+      tags: [],
+      transactions: [],
+      transactionTags: [],
+      budgets: [],
+      recurringTemplates: [],
+      goals: [],
+      subscriptions: [],
+      debts: [],
+      settings: [],
+    },
+  };
+
+  it('throws error for invalid format with expected message', async () => {
     await expect(
       decryptBackupPayload('invalid-data', 'password')
-    ).rejects.toThrow();
+    ).rejects.toThrow('Not an encrypted FinTrack backup');
   });
 
-  // Known limitation: Simple XOR mock can't truly simulate password-based encryption failure.
-  // The mock deterministically transforms data but doesn't fail on wrong passwords like real AES.
-  // This test documents expected behavior even though the mock passes it.
-  it.skip('throws error for wrong password (mock limitation)', async () => {
-    const samplePayload: BackupPayload = {
-      schemaVersion: BACKUP_SCHEMA_VERSION,
-      exportedAt: new Date().toISOString(),
-      data: {
-        accountGroups: [],
-        accounts: [],
-        categories: [],
-        tags: [],
-        transactions: [],
-        transactionTags: [],
-        budgets: [],
-        recurringTemplates: [],
-        goals: [],
-        subscriptions: [],
-        debts: [],
-        settings: [],
-      },
-    };
+  it('rejects legacy FTENC1 backups with expected message', async () => {
+    await expect(
+      decryptBackupPayload('FTENC1.deadbeef.ciphertext', 'password')
+    ).rejects.toThrow(
+      'This backup uses an outdated encryption format. Re-export from a newer FinTrack build.'
+    );
+  });
 
+  it('rejects backups that do not have exactly three dot-separated parts', async () => {
+    await expect(
+      decryptBackupPayload('FTENC2.onlysalt', 'password')
+    ).rejects.toThrow('Not an encrypted FinTrack backup');
+  });
+
+  it('uses salt from the file when deriving the key (wrong salt breaks decrypt)', async () => {
+    const password = 'test-password-123';
+    const encrypted = await encryptBackupPayload(samplePayload, password);
+    const parts = encrypted.split('.');
+    expect(parts).toHaveLength(3);
+    const tamperedSalt = parts[1].replace(/.$/, (c) => (c === 'a' ? 'b' : 'a'));
+    const tampered = `${parts[0]}.${tamperedSalt}.${parts[2]}`;
+    await expect(decryptBackupPayload(tampered, password)).rejects.toThrow(
+      /Wrong password or corrupted backup/
+    );
+  });
+
+  it('throws error for wrong password', async () => {
     const encrypted = await encryptBackupPayload(
       samplePayload,
       'correct-password'
@@ -273,7 +305,7 @@ describe('decryptBackupPayload', () => {
 
     await expect(
       decryptBackupPayload(encrypted, 'wrong-password')
-    ).rejects.toThrow();
+    ).rejects.toThrow(/Wrong password or corrupted backup/);
   });
 
   it('throws error for unsupported schema version', async () => {

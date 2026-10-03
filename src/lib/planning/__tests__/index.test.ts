@@ -145,9 +145,7 @@ describe('computeNextDueAt', () => {
     expect(daysDiff).toBe(14);
   });
 
-  // KNOWN BUG: Monthly intervals clamp day to 28 to avoid month-end issues, but this
-  // prevents users from setting monthly recurrence on days 29-31 (e.g., "last day of month").
-  // TODO: Implement proper month-end handling (e.g., use endOfMonth or allow 29-31 with fallback).
+  // Documented limitation (planning.ts:70): monthly day-of-month is clamped to 28.
   it('clamps monthly day to 1-28 range', () => {
     const next = computeNextDueAt('monthly', 50, base);
     expect(next.getDate()).toBe(28);
