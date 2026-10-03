@@ -28,7 +28,7 @@ import {
   transactions,
   transactionTags,
 } from '@/lib/db/schema';
-import { fromMinorUnits } from '@/lib/money';
+import { fromMinorUnits, parseAmountToMinor } from '@/lib/money';
 
 export const BACKUP_SCHEMA_VERSION = 1;
 export const ENC_PREFIX = 'FTENC2';
@@ -365,18 +365,29 @@ export function parseTransactionsCsv(
 
   for (const line of lines.slice(1)) {
     const cols = parseCsvLine(line);
-    const rawAmount = Number.parseFloat(cols[amountIdx] ?? '');
-    if (!Number.isFinite(rawAmount)) {
-      skipped += 1;
-      continue;
-    }
     const typeRaw = (cols[typeIdx] ?? 'expense').toLowerCase();
     const type: 'expense' | 'income' =
       typeRaw === 'income' ? 'income' : 'expense';
     const currencyCode = (cols[currencyIdx] || defaultCurrency).toUpperCase();
-    const amount = isMinor
-      ? fromMinorUnits(Math.abs(Math.round(rawAmount)), currencyCode)
-      : Math.abs(rawAmount);
+
+    let amount: number;
+    if (isMinor) {
+      const rawAmount = Number.parseFloat(cols[amountIdx] ?? '');
+      if (!Number.isFinite(rawAmount)) {
+        skipped += 1;
+        continue;
+      }
+      amount = fromMinorUnits(Math.abs(Math.round(rawAmount)), currencyCode);
+    } else {
+      const amountStr = cols[amountIdx] ?? '';
+      const amountMinor = parseAmountToMinor(amountStr, currencyCode);
+      if (amountMinor === null) {
+        skipped += 1;
+        continue;
+      }
+      amount = fromMinorUnits(Math.abs(amountMinor), currencyCode);
+    }
+
     const title = cols[titleIdx]?.trim() || 'Imported';
     const note = cols[noteIdx]?.trim() || undefined;
     const dateRaw = cols[dateIdx];

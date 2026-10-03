@@ -26,7 +26,7 @@ import {
 } from '@/lib/db/queries';
 import type { Category, RecurringTemplate } from '@/lib/db/schema';
 import { layout } from '@/lib/layout';
-import { formatMoney } from '@/lib/money';
+import { formatMoney, fromMinorUnits, parseAmountToMinor } from '@/lib/money';
 import type { RecurringCadence } from '@/lib/planning';
 import { useApp } from '@/providers/app-provider';
 
@@ -117,9 +117,13 @@ export function RecurringScreen() {
       accounts.find((a) => a.id === accountId) ??
       accounts.find((a) => a.id === settings?.activeAccountId) ??
       accounts[0];
-    const value = Number.parseFloat(amount);
-    if (!account || !title.trim() || !Number.isFinite(value)) {
-      Alert.alert('Need account, title, and amount');
+    if (!account || !title.trim()) {
+      Alert.alert('Need account and title');
+      return;
+    }
+    const amountMinor = parseAmountToMinor(amount, account.currencyCode);
+    if (amountMinor === null || amountMinor <= 0) {
+      Alert.alert('Enter a valid amount');
       return;
     }
     const intervalDays = resolveIntervalDays();
@@ -128,7 +132,7 @@ export function RecurringScreen() {
       categoryId: categoryId || null,
       type,
       title: title.trim(),
-      amount: value,
+      amount: fromMinorUnits(amountMinor, account.currencyCode),
       currencyCode: account.currencyCode,
       cadence,
       intervalDays,

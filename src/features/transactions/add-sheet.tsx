@@ -33,6 +33,7 @@ import {
 import type { Category } from '@/lib/db/schema';
 import { layout } from '@/lib/layout';
 import { persistImage, pickImage, takePhoto } from '@/lib/media';
+import { fromMinorUnits, parseAmountToMinor } from '@/lib/money';
 import { useApp } from '@/providers/app-provider';
 
 type Props = {
@@ -125,8 +126,8 @@ export function AddTransactionSheet({ visible, onClose, onSaved }: Props) {
       showToast('Create an account first', 'error');
       return;
     }
-    const value = Number.parseFloat(values.amount);
-    if (!Number.isFinite(value) || value <= 0) {
+    const amountMinor = parseAmountToMinor(values.amount, currency);
+    if (amountMinor === null || amountMinor <= 0) {
       showToast('Enter a valid amount', 'error');
       return;
     }
@@ -147,7 +148,7 @@ export function AddTransactionSheet({ visible, onClose, onSaved }: Props) {
         await createTransfer(db, {
           fromAccountId: account.id,
           toAccountId: to.id,
-          amount: value,
+          amount: fromMinorUnits(amountMinor, currency),
           fromCurrency: account.currencyCode,
           toCurrency: to.currencyCode,
           title: values.title.trim() || 'Transfer',
@@ -158,7 +159,7 @@ export function AddTransactionSheet({ visible, onClose, onSaved }: Props) {
           accountId: account.id,
           categoryId: values.categoryId,
           type: values.mode,
-          amount: value,
+          amount: fromMinorUnits(amountMinor, currency),
           currencyCode: account.currencyCode,
           title: values.title.trim(),
           note: values.note,

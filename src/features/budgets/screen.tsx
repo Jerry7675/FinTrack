@@ -26,7 +26,7 @@ import {
 } from '@/lib/db/queries';
 import type { Budget, Category } from '@/lib/db/schema';
 import { layout } from '@/lib/layout';
-import { formatMoney } from '@/lib/money';
+import { formatMoney, fromMinorUnits, parseAmountToMinor } from '@/lib/money';
 import {
   type BudgetPeriod,
   budgetDaysRemaining,
@@ -78,16 +78,17 @@ export function BudgetsScreen() {
   useReloadOnFocus(load);
 
   const add = async () => {
-    const value = Number.parseFloat(amount);
-    if (!name.trim() || !Number.isFinite(value) || !categoryId) {
-      Alert.alert('Fill name, amount, and category');
+    const currency = settings?.defaultCurrency ?? 'USD';
+    const amountMinor = parseAmountToMinor(amount, currency);
+    if (!name.trim() || amountMinor === null || amountMinor <= 0 || !categoryId) {
+      Alert.alert('Fill name, valid amount, and category');
       return;
     }
     await createBudget(db, {
       name: name.trim(),
       categoryId,
-      amount: value,
-      currencyCode: settings?.defaultCurrency ?? 'USD',
+      amount: fromMinorUnits(amountMinor, currency),
+      currencyCode: currency,
       period,
     });
     setName('');
