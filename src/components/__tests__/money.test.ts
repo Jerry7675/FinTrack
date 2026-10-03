@@ -62,4 +62,21 @@ describe('moneyA11yLabel', () => {
       expect(moneyA11yLabel(100, 'JPY')).toBe('plus 100 JPY');
     });
   });
+
+  describe('unknown currency codes', () => {
+    it('uses passed code and fallback decimals for unknown code', () => {
+      expect(moneyA11yLabel(5200, 'KWD')).toBe('plus 52.00 KWD');
+    });
+
+    it('prints the passed code upper-cased', () => {
+      expect(moneyA11yLabel(10050, 'xyz')).toBe('plus 100.50 XYZ');
+    });
+  });
+
+  describe('known currency code is preserved', () => {
+    it('uses the passed code exactly (upper-cased)', () => {
+      expect(moneyA11yLabel(5200, 'usd')).toBe('plus 52.00 USD');
+      expect(moneyA11yLabel(1000, 'npr')).toBe('plus 10.00 NPR');
+    });
+  });
 });
