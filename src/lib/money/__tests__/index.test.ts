@@ -185,6 +185,34 @@ describe('parseAmountToMinor', () => {
   });
 });
 
+describe('parseAmountToMinor - malformed thousands separators', () => {
+  it('rejects separators with invalid grouping', () => {
+    expect(parseAmountToMinor('1,2,3', 'USD')).toBeNull();
+    expect(parseAmountToMinor('1,234,56', 'EUR')).toBeNull();
+  });
+
+  it('rejects ambiguous decimal-like input for zero-decimal currencies', () => {
+    expect(parseAmountToMinor('1,5', 'JPY')).toBeNull();
+    expect(parseAmountToMinor('1,50', 'JPY')).toBeNull();
+    expect(parseAmountToMinor('1.5', 'JPY')).toBeNull();
+  });
+
+  it('correctly parses thousands separator for zero-decimal currencies', () => {
+    expect(parseAmountToMinor('1,000', 'JPY')).toBe(1000);
+    expect(parseAmountToMinor('1.000', 'JPY')).toBe(1000);
+  });
+
+  it('rejects overly small input that looks like typo', () => {
+    expect(parseAmountToMinor('0,005', 'USD')).toBeNull();
+    expect(parseAmountToMinor('0.005', 'USD')).toBeNull();
+  });
+
+  it('rejects lone period/comma', () => {
+    expect(parseAmountToMinor('.', 'USD')).toBeNull();
+    expect(parseAmountToMinor(',', 'USD')).toBeNull();
+  });
+});
+
 describe('formatMinorToDecimal', () => {
   it('formats USD amounts correctly', () => {
     expect(formatMinorToDecimal(150, 'USD')).toBe('1.50');

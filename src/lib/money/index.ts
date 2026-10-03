@@ -109,83 +109,139 @@ export function parseAmountToMinor(
   let integerPart = '';
   let fractionalPart = '';
 
+  function isValidThousandsSeparators(str: string, sep: string): boolean {
+    if (!str.includes(sep)) return true;
+    const parts = str.split(sep);
+    if (parts.length < 2) return true;
+
+    const isIndianStyle = currencyCode === 'INR' || currencyCode === 'NPR';
+    if (isIndianStyle) {
+      if (parts[0].length > 3) return false;
+      for (let i = 1; i < parts.length - 1; i++) {
+        if (parts[i].length !== 2) return false;
+      }
+      if (parts[parts.length - 1].length !== 3) return false;
+      return true;
+    }
+
+    if (parts[0].length > 3) return false;
+    for (let i = 1; i < parts.length; i++) {
+      if (parts[i].length !== 3) return false;
+    }
+    return true;
+  }
+
   if (hasComma && hasPeriod) {
     const lastComma = cleaned.lastIndexOf(',');
     const lastPeriod = cleaned.lastIndexOf('.');
 
     if (lastComma > lastPeriod) {
-      const beforeDecimal = cleaned.substring(0, lastComma).replace(/\./g, '');
+      const beforeDecimal = cleaned.substring(0, lastComma);
       const afterDecimal = cleaned.substring(lastComma + 1);
 
-      if (!/^\d+$/.test(beforeDecimal) || !/^\d+$/.test(afterDecimal)) {
-        return null;
-      }
+      if (!/^\d+$/.test(afterDecimal)) return null;
+      if (!isValidThousandsSeparators(beforeDecimal, '.')) return null;
 
-      integerPart = beforeDecimal;
+      const integerCleaned = beforeDecimal.replace(/\./g, '');
+      if (!/^\d+$/.test(integerCleaned)) return null;
+
+      integerPart = integerCleaned;
       fractionalPart = afterDecimal;
     } else {
-      const beforeDecimal = cleaned.substring(0, lastPeriod).replace(/,/g, '');
+      const beforeDecimal = cleaned.substring(0, lastPeriod);
       const afterDecimal = cleaned.substring(lastPeriod + 1);
 
-      if (!/^\d+$/.test(beforeDecimal) || !/^\d+$/.test(afterDecimal)) {
-        return null;
-      }
+      if (!/^\d+$/.test(afterDecimal)) return null;
+      if (!isValidThousandsSeparators(beforeDecimal, ',')) return null;
 
-      integerPart = beforeDecimal;
+      const integerCleaned = beforeDecimal.replace(/,/g, '');
+      if (!/^\d+$/.test(integerCleaned)) return null;
+
+      integerPart = integerCleaned;
       fractionalPart = afterDecimal;
     }
   } else if (hasComma) {
     const parts = cleaned.split(',');
 
-    if (parts.length > 2) {
+    if (parts.length === 2) {
+      const digitsAfter = parts[1].length;
+      const digitsBefore = parts[0].length;
+
+      if (digitsAfter === 0) return null;
+      if (!/^\d*$/.test(parts[0]) || !/^\d+$/.test(parts[1])) return null;
+
+      if (decimals === 0) {
+        if (digitsAfter === 3) {
+          integerPart = parts.join('');
+          fractionalPart = '';
+        } else {
+          return null;
+        }
+      } else {
+        if (digitsAfter === 3) {
+          const hasNonZeroInteger = parts[0] !== '' && parts[0] !== '0';
+          if (hasNonZeroInteger && digitsBefore >= 1 && digitsBefore <= 3) {
+            integerPart = parts.join('');
+            fractionalPart = '';
+          } else {
+            integerPart = parts[0] || '0';
+            fractionalPart = parts[1];
+          }
+        } else if (digitsAfter > decimals) {
+          return null;
+        } else {
+          integerPart = parts[0] || '0';
+          fractionalPart = parts[1];
+        }
+      }
+    } else if (parts.length > 2) {
+      if (!isValidThousandsSeparators(cleaned, ',')) return null;
       const joined = parts.join('');
       if (!/^\d+$/.test(joined)) return null;
       integerPart = joined;
       fractionalPart = '';
     } else {
-      const digitsAfterLastComma = parts[parts.length - 1].length;
-      const hasNonZeroInteger = parts[0] !== '' && parts[0] !== '0';
-
-      if (
-        parts.length === 2 &&
-        digitsAfterLastComma <= decimals &&
-        digitsAfterLastComma <= 2
-      ) {
-        if (!hasNonZeroInteger || digitsAfterLastComma !== 3) {
-          if (!/^\d*$/.test(parts[0]) || !/^\d+$/.test(parts[1])) {
-            return null;
-          }
-          integerPart = parts[0] || '0';
-          fractionalPart = parts[1];
-        } else {
-          const joined = parts.join('');
-          if (!/^\d+$/.test(joined)) return null;
-          integerPart = joined;
-          fractionalPart = '';
-        }
-      } else {
-        const joined = parts.join('');
-        if (!/^\d+$/.test(joined)) return null;
-        integerPart = joined;
-        fractionalPart = '';
-      }
+      return null;
     }
   } else if (hasPeriod) {
     const parts = cleaned.split('.');
-    if (parts.length !== 2) return null;
 
-    if (!/^\d*$/.test(parts[0])) {
-      return null;
-    }
+    if (parts.length === 2) {
+      const digitsAfter = parts[1].length;
+      const digitsBefore = parts[0].length;
 
-    if (parts[1] === '') {
-      integerPart = parts[0] || '0';
+      if (!/^\d*$/.test(parts[0])) return null;
+
+      if (parts[1] === '') {
+        if (parts[0] === '') return null;
+        integerPart = parts[0];
+        fractionalPart = '';
+      } else if (!/^\d+$/.test(parts[1])) {
+        return null;
+      } else {
+        if (decimals === 0) {
+          if (digitsAfter === 3 && digitsBefore >= 1 && digitsBefore <= 3) {
+            integerPart = parts.join('');
+            fractionalPart = '';
+          } else if (!/^0+$/.test(parts[1])) {
+            return null;
+          } else {
+            integerPart = parts[0] || '0';
+            fractionalPart = '';
+          }
+        } else {
+          integerPart = parts[0] || '0';
+          fractionalPart = parts[1];
+        }
+      }
+    } else if (parts.length > 2) {
+      if (!isValidThousandsSeparators(cleaned, '.')) return null;
+      const joined = parts.join('');
+      if (!/^\d+$/.test(joined)) return null;
+      integerPart = joined;
       fractionalPart = '';
-    } else if (!/^\d+$/.test(parts[1])) {
-      return null;
     } else {
-      integerPart = parts[0] || '0';
-      fractionalPart = parts[1];
+      return null;
     }
   } else {
     if (!/^\d+$/.test(cleaned)) return null;
