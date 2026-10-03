@@ -1,4 +1,4 @@
-import { View, type ViewStyle, type DimensionValue } from 'react-native';
+import { type DimensionValue, View, type ViewStyle } from 'react-native';
 import { useThemeColors } from './primitives';
 
 export function Skeleton({

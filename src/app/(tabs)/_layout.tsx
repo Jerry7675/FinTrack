@@ -1,14 +1,15 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
-
+import { colors } from '@/constants/palette';
 import { scale } from '@/lib/layout';
 import { useApp } from '@/providers/app-provider';
 
 export default function TabsLayout() {
   const { colorScheme } = useApp();
-  const active = colorScheme === 'dark' ? '#3DDB8A' : '#1A7A4C';
-  const inactive = colorScheme === 'dark' ? '#A1A1AA' : '#5C6B64';
-  const bg = colorScheme === 'dark' ? '#0A0A0A' : '#F4F7F5';
+  const c = colors(colorScheme === 'dark' ? 'dark' : 'light');
+  const active = c.accent;
+  const inactive = c.inkMuted;
+  const bg = c.surface;
 
   return (
     <Tabs
@@ -18,7 +19,7 @@ export default function TabsLayout() {
         tabBarInactiveTintColor: inactive,
         tabBarStyle: {
           backgroundColor: bg,
-          borderTopColor: colorScheme === 'dark' ? '#27272A' : '#D5DED8',
+          borderTopColor: c.line,
           height: scale(64),
           paddingBottom: scale(8),
           paddingTop: scale(6),

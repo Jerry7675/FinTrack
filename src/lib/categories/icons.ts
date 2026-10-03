@@ -125,14 +125,14 @@ export const DEFAULT_CATEGORIES: {
     color: '#22C55E',
   },
   { name: 'Other', kind: 'expense', iconKey: 'other', color: '#6B7280' },
-  { name: 'Salary', kind: 'income', iconKey: 'salary', color: '#1A7A4C' },
+  { name: 'Salary', kind: 'income', iconKey: 'salary', color: '#00F59B' },
   { name: 'Freelance', kind: 'income', iconKey: 'freelance', color: '#2A9D8F' },
   {
     name: 'Investment',
     kind: 'income',
     iconKey: 'investment',
-    color: '#3DDB8A',
+    color: '#00F59B',
   },
   { name: 'Gift', kind: 'income', iconKey: 'gift', color: '#E07A3D' },
-  { name: 'Other income', kind: 'income', iconKey: 'other', color: '#5C6B64' },
+  { name: 'Other income', kind: 'income', iconKey: 'other', color: '#6B7280' },
 ];

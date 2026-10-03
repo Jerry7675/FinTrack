@@ -263,10 +263,7 @@ export function DashboardScreen() {
       if (item.kind === 'balance') {
         return (
           <View className='mt-5'>
-            <BalanceCard
-              amount={formatMoney(totalBalance, currency)}
-              onAdd={() => setAddOpen(true)}
-            />
+            <BalanceCard amount={formatMoney(totalBalance, currency)} />
           </View>
         );
       }
@@ -277,19 +274,16 @@ export function DashboardScreen() {
             <ActionTile
               label='Add'
               icon='add-circle-outline'
-              tone='green'
               onPress={() => setAddOpen(true)}
             />
             <ActionTile
               label='Accounts'
               icon='wallet-outline'
-              tone='mint'
               onPress={() => router.push('/(tabs)/accounts')}
             />
             <ActionTile
               label='Insights'
               icon='stats-chart-outline'
-              tone='slate'
               onPress={() => router.push('/(tabs)/insights')}
             />
           </View>

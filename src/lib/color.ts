@@ -5,31 +5,31 @@
 export function ensureContrast(
   hex: string,
   bgHex: string,
-  minRatio = 3,
+  minRatio = 3
 ): string {
   const fg = hexToRgb(hex);
   const bg = hexToRgb(bgHex);
-  
+
   if (!fg || !bg) return hex;
-  
+
   const currentRatio = contrastRatio(fg, bg);
   if (currentRatio >= minRatio) return hex;
-  
+
   const hsl = rgbToHsl(fg);
   let low = 0;
   let high = 1;
   let bestL = hsl.l;
-  
+
   for (let i = 0; i < 20; i++) {
     const testL = (low + high) / 2;
     const testRgb = hslToRgb({ ...hsl, l: testL });
     const ratio = contrastRatio(testRgb, bg);
-    
+
     if (Math.abs(ratio - minRatio) < 0.01) {
       bestL = testL;
       break;
     }
-    
+
     if (ratio < minRatio) {
       if (hsl.l < 0.5) {
         high = testL;
@@ -45,7 +45,7 @@ export function ensureContrast(
       bestL = testL;
     }
   }
-  
+
   const adjusted = hslToRgb({ ...hsl, l: bestL });
   return rgbToHex(adjusted);
 }
@@ -70,14 +70,14 @@ function rgbToHex(rgb: { r: number; g: number; b: number }): string {
 
 function luminance(rgb: { r: number; g: number; b: number }): number {
   const [r, g, b] = [rgb.r, rgb.g, rgb.b].map((v) =>
-    v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4,
+    v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4
   );
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
 
 function contrastRatio(
   fg: { r: number; g: number; b: number },
-  bg: { r: number; g: number; b: number },
+  bg: { r: number; g: number; b: number }
 ): number {
   const l1 = luminance(fg);
   const l2 = luminance(bg);
@@ -86,11 +86,11 @@ function contrastRatio(
   return (lighter + 0.05) / (darker + 0.05);
 }
 
-function rgbToHsl(rgb: {
-  r: number;
-  g: number;
-  b: number;
-}): { h: number; s: number; l: number } {
+function rgbToHsl(rgb: { r: number; g: number; b: number }): {
+  h: number;
+  s: number;
+  l: number;
+} {
   const max = Math.max(rgb.r, rgb.g, rgb.b);
   const min = Math.min(rgb.r, rgb.g, rgb.b);
   const l = (max + min) / 2;
@@ -114,11 +114,11 @@ function rgbToHsl(rgb: {
   return { h, s, l };
 }
 
-function hslToRgb(hsl: {
-  h: number;
-  s: number;
-  l: number;
-}): { r: number; g: number; b: number } {
+function hslToRgb(hsl: { h: number; s: number; l: number }): {
+  r: number;
+  g: number;
+  b: number;
+} {
   if (hsl.s === 0) {
     return { r: hsl.l, g: hsl.l, b: hsl.l };
   }

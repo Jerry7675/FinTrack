@@ -171,15 +171,16 @@ export function Button({
         ? c.inkInverse
         : c.ink;
 
-  const shadow = prominent && variant === 'primary' && !disabled && colorScheme === 'dark'
-    ? {
-        shadowColor: c.accent,
-        shadowOpacity: 0.3,
-        shadowRadius: 14,
-        shadowOffset: { width: 0, height: 4 },
-        elevation: 8,
-      }
-    : {};
+  const shadow =
+    prominent && variant === 'primary' && !disabled && colorScheme === 'dark'
+      ? {
+          shadowColor: c.accent,
+          shadowOpacity: 0.3,
+          shadowRadius: 14,
+          shadowOffset: { width: 0, height: 4 },
+          elevation: 8,
+        }
+      : {};
 
   return (
     <Pressable
@@ -902,13 +903,14 @@ export function ProgressBar({
 }) {
   const c = useThemeColors();
   const pct = Math.max(0, Math.min(1, progress));
-  const stateColor = state === 'ok'
-    ? c.income
-    : state === 'near'
-      ? c.warning
-      : state === 'over'
-        ? c.expense
-        : undefined;
+  const stateColor =
+    state === 'ok'
+      ? c.income
+      : state === 'near'
+        ? c.warning
+        : state === 'over'
+          ? c.expense
+          : undefined;
 
   return (
     <View

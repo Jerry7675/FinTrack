@@ -1,6 +1,6 @@
 import { View } from 'react-native';
-import { AppText, useThemeColors } from './primitives';
 import { formatMoney } from '@/lib/money';
+import { AppText, useThemeColors } from './primitives';
 
 export function StackedBar({
   ownedMinor,
@@ -21,8 +21,11 @@ export function StackedBar({
   }
 
   return (
-    <View className="gap-3">
-      <View className="flex-row gap-1 overflow-hidden rounded-full" style={{ height: 32 }}>
+    <View className='gap-3'>
+      <View
+        className='flex-row gap-1 overflow-hidden rounded-full'
+        style={{ height: 32 }}
+      >
         {ownedMinor > 0 ? (
           <View
             style={{
@@ -40,20 +43,20 @@ export function StackedBar({
           />
         ) : null}
       </View>
-      <View className="flex-row justify-between gap-4">
-        <View className="flex-1 gap-1">
-          <AppText size="xs" muted>
+      <View className='flex-row justify-between gap-4'>
+        <View className='flex-1 gap-1'>
+          <AppText size='xs' muted>
             What you own
           </AppText>
-          <AppText size="sm" weight="semibold" style={{ color: c.income }}>
+          <AppText size='sm' weight='semibold' style={{ color: c.income }}>
             {formatMoney(ownedMinor, currency)}
           </AppText>
         </View>
-        <View className="flex-1 items-end gap-1">
-          <AppText size="xs" muted>
+        <View className='flex-1 items-end gap-1'>
+          <AppText size='xs' muted>
             What you owe
           </AppText>
-          <AppText size="sm" weight="semibold" style={{ color: c.expense }}>
+          <AppText size='sm' weight='semibold' style={{ color: c.expense }}>
             {formatMoney(owedMinor, currency)}
           </AppText>
         </View>

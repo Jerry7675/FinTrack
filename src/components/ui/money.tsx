@@ -1,8 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { View } from 'react-native';
-import { AppText, useThemeColors } from './primitives';
-import { formatMoney } from '@/lib/money';
 import { scale } from '@/lib/layout';
+import { formatMoney } from '@/lib/money';
+import { AppText, useThemeColors } from './primitives';
 
 export type MoneyTone = 'auto' | 'neutral' | 'income' | 'expense';
 
@@ -42,7 +42,8 @@ export function Money({
         ? c.expense
         : c.ink;
 
-  const displayValue = showSign && !isNegative && !isZero ? `+${formatted}` : formatted;
+  const displayValue =
+    showSign && !isNegative && !isZero ? `+${formatted}` : formatted;
 
   const spokenSign = isNegative ? 'minus' : showSign && !isZero ? 'plus' : '';
   const parts = Math.abs(minor)
@@ -51,18 +52,25 @@ export function Money({
     .match(/^(.*)(\d{2})$/);
   const dollars = parts ? Number.parseInt(parts[1], 10) : 0;
   const cents = parts ? parts[2] : '00';
-  const accessibilityLabel = `${spokenSign} ${dollars} ${currency === 'USD' ? 'dollars' : currency} ${cents === '00' ? '' : `and ${cents} cents`}`.trim();
+  const accessibilityLabel =
+    `${spokenSign} ${dollars} ${currency === 'USD' ? 'dollars' : currency} ${cents === '00' ? '' : `and ${cents} cents`}`.trim();
 
   return (
     <View
-      className="flex-row items-center gap-1.5"
+      className='flex-row items-center gap-1.5'
       accessibilityLabel={accessibilityLabel}
-      accessibilityRole="text"
+      accessibilityRole='text'
     >
       {icon ? (
         <Ionicons
           name={icon}
-          size={size === 'display' ? scale(24) : size === 'xl' ? scale(20) : scale(16)}
+          size={
+            size === 'display'
+              ? scale(24)
+              : size === 'xl'
+                ? scale(20)
+                : scale(16)
+          }
           color={color}
           accessibilityElementsHidden
         />

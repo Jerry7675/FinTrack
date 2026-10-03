@@ -28,9 +28,9 @@ const FinTrackBalanceWidget = (
   const budget1 = props.budgetLine1 || '';
   const budget2 = props.budgetLine2 || '';
   const family = environment.widgetFamily;
-  const ink = '#0B1F17';
-  const muted = '#5C6B64';
-  const accent = '#1A7A4C';
+  const ink = '#0F131C';
+  const muted = '#5B6670';
+  const accent = '#0369A1';
 
   if (family === 'systemLarge') {
     return (
