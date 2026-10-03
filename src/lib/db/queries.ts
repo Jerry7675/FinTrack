@@ -320,9 +320,10 @@ export async function createTransaction(
     tagNames: input.tagNames,
   });
   const id = createId();
-  const amountMinor = input.amountMinor !== undefined
-    ? Math.abs(input.amountMinor)
-    : Math.abs(toMinorUnits(parsed.amount, parsed.currencyCode));
+  const amountMinor =
+    input.amountMinor !== undefined
+      ? Math.abs(input.amountMinor)
+      : Math.abs(toMinorUnits(parsed.amount, parsed.currencyCode));
   await database.insert(transactions).values({
     id,
     accountId: parsed.accountId,
@@ -560,9 +561,10 @@ export async function createBudget(
   }
 ) {
   const id = createId();
-  const amountMinor = input.amountMinor !== undefined
-    ? input.amountMinor
-    : toMinorUnits(input.amount ?? 0, input.currencyCode);
+  const amountMinor =
+    input.amountMinor !== undefined
+      ? input.amountMinor
+      : toMinorUnits(input.amount ?? 0, input.currencyCode);
   await database.insert(budgets).values({
     id,
     name: input.name.trim(),
@@ -650,9 +652,10 @@ export async function createRecurring(
 ) {
   const id = createId();
   const due = startOfDay(new Date());
-  const amountMinor = input.amountMinor !== undefined
-    ? input.amountMinor
-    : toMinorUnits(input.amount ?? 0, input.currencyCode);
+  const amountMinor =
+    input.amountMinor !== undefined
+      ? input.amountMinor
+      : toMinorUnits(input.amount ?? 0, input.currencyCode);
   await database.insert(recurringTemplates).values({
     id,
     accountId: input.accountId,
@@ -715,12 +718,14 @@ export async function createGoal(
   }
 ) {
   const id = createId();
-  const targetMinor = input.targetMinor !== undefined
-    ? input.targetMinor
-    : toMinorUnits(input.target ?? 0, input.currencyCode);
-  const currentMinor = input.currentMinor !== undefined
-    ? input.currentMinor
-    : toMinorUnits(input.current ?? 0, input.currencyCode);
+  const targetMinor =
+    input.targetMinor !== undefined
+      ? input.targetMinor
+      : toMinorUnits(input.target ?? 0, input.currencyCode);
+  const currentMinor =
+    input.currentMinor !== undefined
+      ? input.currentMinor
+      : toMinorUnits(input.current ?? 0, input.currencyCode);
   await database.insert(goals).values({
     id,
     name: input.name.trim(),
@@ -755,9 +760,10 @@ export async function addGoalContribution(
     .where(and(eq(goals.id, id), isNull(goals.deletedAt)))
     .limit(1);
   if (!row) return;
-  const delta = amountMinor !== undefined && amountMinor > 0
-    ? amountMinor
-    : toMinorUnits(amount ?? 0, currencyCode ?? row.currencyCode);
+  const delta =
+    amountMinor !== undefined && amountMinor > 0
+      ? amountMinor
+      : toMinorUnits(amount ?? 0, currencyCode ?? row.currencyCode);
   if (delta <= 0) return;
   await database
     .update(goals)
@@ -829,9 +835,10 @@ export async function createSubscription(
 ) {
   const id = createId();
   const due = startOfDay(new Date());
-  const amountMinor = input.amountMinor !== undefined
-    ? input.amountMinor
-    : toMinorUnits(input.amount ?? 0, input.currencyCode);
+  const amountMinor =
+    input.amountMinor !== undefined
+      ? input.amountMinor
+      : toMinorUnits(input.amount ?? 0, input.currencyCode);
   await database.insert(subscriptions).values({
     id,
     accountId: input.accountId,
@@ -923,15 +930,17 @@ export async function createDebt(
   }
 ) {
   const id = createId();
-  const principalMinor = input.principalMinor !== undefined
-    ? input.principalMinor
-    : toMinorUnits(input.principal ?? 0, input.currencyCode);
-  const remainingMinor = input.remainingMinor !== undefined
-    ? input.remainingMinor
-    : toMinorUnits(
-      input.remaining ?? input.principal ?? 0,
-      input.currencyCode
-    );
+  const principalMinor =
+    input.principalMinor !== undefined
+      ? input.principalMinor
+      : toMinorUnits(input.principal ?? 0, input.currencyCode);
+  const remainingMinor =
+    input.remainingMinor !== undefined
+      ? input.remainingMinor
+      : toMinorUnits(
+          input.remaining ?? input.principal ?? 0,
+          input.currencyCode
+        );
   await database.insert(debts).values({
     id,
     name: input.name.trim(),
@@ -1042,9 +1051,10 @@ export async function recordDebtPayment(
     .where(and(eq(debts.id, id), isNull(debts.deletedAt)))
     .limit(1);
   if (!row) return;
-  const delta = amountMinor !== undefined && amountMinor > 0
-    ? amountMinor
-    : toMinorUnits(amount ?? 0, currencyCode ?? row.currencyCode);
+  const delta =
+    amountMinor !== undefined && amountMinor > 0
+      ? amountMinor
+      : toMinorUnits(amount ?? 0, currencyCode ?? row.currencyCode);
   if (delta <= 0) return;
   await database
     .update(debts)

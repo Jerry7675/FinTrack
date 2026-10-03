@@ -24,7 +24,7 @@ export function getCurrency(code: string): Currency {
 
 /**
  * Parse user-entered amount string to integer minor units.
- * 
+ *
  * Rules:
  * - Rejects input with non-zero digits beyond currency's decimal places (e.g., "1.005" for USD)
  * - Allows trailing zeros (e.g., "1.50000" for USD)
@@ -55,15 +55,32 @@ export function parseAmountToMinor(
   currencyCode: string
 ): number | null {
   if (!input) return null;
-  
+
   const { decimals } = getCurrency(currencyCode);
-  
+
   let cleaned = input.trim();
   if (!cleaned) return null;
-  
-  const currencySymbolsAndCodes = ['$', '€', '£', '¥', 'Rs', 'A$', 'C$', 'CHF', 
-    'USD', 'EUR', 'GBP', 'JPY', 'INR', 'NPR', 'AUD', 'CAD', 'CNY'];
-  
+
+  const currencySymbolsAndCodes = [
+    '$',
+    '€',
+    '£',
+    '¥',
+    'Rs',
+    'A$',
+    'C$',
+    'CHF',
+    'USD',
+    'EUR',
+    'GBP',
+    'JPY',
+    'INR',
+    'NPR',
+    'AUD',
+    'CAD',
+    'CNY',
+  ];
+
   for (const symbol of currencySymbolsAndCodes) {
     if (cleaned.startsWith(symbol)) {
       cleaned = cleaned.slice(symbol.length).trim();
@@ -72,54 +89,54 @@ export function parseAmountToMinor(
       cleaned = cleaned.slice(0, -symbol.length).trim();
     }
   }
-  
+
   if (!cleaned) return null;
-  
+
   const hasPlus = cleaned.startsWith('+');
   const hasMinus = cleaned.startsWith('-');
   const isNegative = hasMinus;
-  
+
   if (hasPlus || hasMinus) {
     cleaned = cleaned.slice(1).trim();
   }
-  
+
   const multipleSignsPattern = /[+-].*[+-]/;
   if (multipleSignsPattern.test(cleaned)) return null;
-  
+
   const hasComma = cleaned.includes(',');
   const hasPeriod = cleaned.includes('.');
-  
+
   let integerPart = '';
   let fractionalPart = '';
-  
+
   if (hasComma && hasPeriod) {
     const lastComma = cleaned.lastIndexOf(',');
     const lastPeriod = cleaned.lastIndexOf('.');
-    
+
     if (lastComma > lastPeriod) {
       const beforeDecimal = cleaned.substring(0, lastComma).replace(/\./g, '');
       const afterDecimal = cleaned.substring(lastComma + 1);
-      
+
       if (!/^\d+$/.test(beforeDecimal) || !/^\d+$/.test(afterDecimal)) {
         return null;
       }
-      
+
       integerPart = beforeDecimal;
       fractionalPart = afterDecimal;
     } else {
       const beforeDecimal = cleaned.substring(0, lastPeriod).replace(/,/g, '');
       const afterDecimal = cleaned.substring(lastPeriod + 1);
-      
+
       if (!/^\d+$/.test(beforeDecimal) || !/^\d+$/.test(afterDecimal)) {
         return null;
       }
-      
+
       integerPart = beforeDecimal;
       fractionalPart = afterDecimal;
     }
   } else if (hasComma) {
     const parts = cleaned.split(',');
-    
+
     if (parts.length > 2) {
       const joined = parts.join('');
       if (!/^\d+$/.test(joined)) return null;
@@ -128,8 +145,12 @@ export function parseAmountToMinor(
     } else {
       const digitsAfterLastComma = parts[parts.length - 1].length;
       const hasNonZeroInteger = parts[0] !== '' && parts[0] !== '0';
-      
-      if (parts.length === 2 && digitsAfterLastComma <= decimals && digitsAfterLastComma <= 2) {
+
+      if (
+        parts.length === 2 &&
+        digitsAfterLastComma <= decimals &&
+        digitsAfterLastComma <= 2
+      ) {
         if (!hasNonZeroInteger || digitsAfterLastComma !== 3) {
           if (!/^\d*$/.test(parts[0]) || !/^\d+$/.test(parts[1])) {
             return null;
@@ -152,11 +173,11 @@ export function parseAmountToMinor(
   } else if (hasPeriod) {
     const parts = cleaned.split('.');
     if (parts.length !== 2) return null;
-    
+
     if (!/^\d*$/.test(parts[0])) {
       return null;
     }
-    
+
     if (parts[1] === '') {
       integerPart = parts[0] || '0';
       fractionalPart = '';
@@ -171,7 +192,7 @@ export function parseAmountToMinor(
     integerPart = cleaned;
     fractionalPart = '';
   }
-  
+
   if (fractionalPart.length > decimals) {
     const extraDigits = fractionalPart.substring(decimals);
     if (!/^0+$/.test(extraDigits)) {
@@ -179,38 +200,38 @@ export function parseAmountToMinor(
     }
     fractionalPart = fractionalPart.substring(0, decimals);
   }
-  
+
   fractionalPart = fractionalPart.padEnd(decimals, '0');
-  
+
   if (integerPart === '' || integerPart === '0') {
     integerPart = '0';
   } else {
     integerPart = integerPart.replace(/^0+/, '') || '0';
   }
-  
+
   const minorString = integerPart + fractionalPart;
-  
+
   let minorValue: number;
   try {
     const bigIntValue = BigInt(minorString);
-    
+
     if (bigIntValue > BigInt(Number.MAX_SAFE_INTEGER)) {
       return null;
     }
-    
+
     minorValue = Number(bigIntValue);
   } catch {
     return null;
   }
-  
+
   if (!Number.isFinite(minorValue) || !Number.isSafeInteger(minorValue)) {
     return null;
   }
-  
+
   if (minorValue === 0) {
     return 0;
   }
-  
+
   return isNegative ? -minorValue : minorValue;
 }
 

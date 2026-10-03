@@ -80,7 +80,12 @@ export function BudgetsScreen() {
   const add = async () => {
     const currency = settings?.defaultCurrency ?? 'USD';
     const amountMinor = parseAmountToMinor(amount, currency);
-    if (!name.trim() || amountMinor === null || amountMinor <= 0 || !categoryId) {
+    if (
+      !name.trim() ||
+      amountMinor === null ||
+      amountMinor <= 0 ||
+      !categoryId
+    ) {
       Alert.alert('Fill name, valid amount, and category');
       return;
     }
