@@ -26,7 +26,7 @@ import {
 } from '@/lib/db/queries';
 import type { Goal } from '@/lib/db/schema';
 import { layout } from '@/lib/layout';
-import { formatMoney, fromMinorUnits, parseAmountToMinor } from '@/lib/money';
+import { formatMoney, parseAmountToMinor } from '@/lib/money';
 import { goalSuggestedMonthly } from '@/lib/planning';
 import { useApp } from '@/providers/app-provider';
 
@@ -75,8 +75,8 @@ export function GoalsScreen() {
     }
     await createGoal(db, {
       name: name.trim(),
-      target: fromMinorUnits(targetMinor, currency),
-      current: startMinor !== undefined ? fromMinorUnits(startMinor, currency) : undefined,
+      targetMinor,
+      currentMinor: startMinor,
       currencyCode: currency,
       deadlineAt,
     });
@@ -100,7 +100,8 @@ export function GoalsScreen() {
     await addGoalContribution(
       db,
       contributeId,
-      fromMinorUnits(amountMinor, currency),
+      undefined,
+      amountMinor,
       currency
     );
     setContributeId(null);

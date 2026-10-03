@@ -298,7 +298,8 @@ export async function createTransaction(
     accountId: string;
     categoryId?: string | null;
     type: 'expense' | 'income';
-    amount: number;
+    amount?: number;
+    amountMinor?: number;
     currencyCode: string;
     title: string;
     note?: string;
@@ -312,16 +313,16 @@ export async function createTransaction(
     accountId: input.accountId,
     categoryId: input.categoryId ?? null,
     type: input.type,
-    amount: input.amount,
+    amount: input.amount ?? 0,
     currencyCode: input.currencyCode,
     title: input.title,
     note: input.note,
     tagNames: input.tagNames,
   });
   const id = createId();
-  const amountMinor = Math.abs(
-    toMinorUnits(parsed.amount, parsed.currencyCode)
-  );
+  const amountMinor = input.amountMinor !== undefined
+    ? Math.abs(input.amountMinor)
+    : Math.abs(toMinorUnits(parsed.amount, parsed.currencyCode));
   await database.insert(transactions).values({
     id,
     accountId: parsed.accountId,
@@ -552,18 +553,22 @@ export async function createBudget(
     name: string;
     categoryId: string;
     accountId?: string | null;
-    amount: number;
+    amount?: number;
+    amountMinor?: number;
     currencyCode: string;
     period: 'weekly' | 'monthly' | 'yearly';
   }
 ) {
   const id = createId();
+  const amountMinor = input.amountMinor !== undefined
+    ? input.amountMinor
+    : toMinorUnits(input.amount ?? 0, input.currencyCode);
   await database.insert(budgets).values({
     id,
     name: input.name.trim(),
     categoryId: input.categoryId,
     accountId: input.accountId ?? null,
-    amountMinor: toMinorUnits(input.amount, input.currencyCode),
+    amountMinor,
     currencyCode: input.currencyCode,
     period: input.period,
     createdAt: new Date(),
@@ -634,7 +639,8 @@ export async function createRecurring(
     categoryId?: string | null;
     type: 'expense' | 'income';
     title: string;
-    amount: number;
+    amount?: number;
+    amountMinor?: number;
     currencyCode: string;
     cadence: 'daily' | 'weekly' | 'monthly' | 'yearly' | 'custom';
     intervalDays?: number | null;
@@ -643,15 +649,17 @@ export async function createRecurring(
   }
 ) {
   const id = createId();
-  // Due today so the first charge posts immediately on create.
   const due = startOfDay(new Date());
+  const amountMinor = input.amountMinor !== undefined
+    ? input.amountMinor
+    : toMinorUnits(input.amount ?? 0, input.currencyCode);
   await database.insert(recurringTemplates).values({
     id,
     accountId: input.accountId,
     categoryId: input.categoryId ?? null,
     type: input.type,
     title: input.title.trim(),
-    amountMinor: toMinorUnits(input.amount, input.currencyCode),
+    amountMinor,
     currencyCode: input.currencyCode,
     cadence: input.cadence,
     intervalDays: input.intervalDays ?? null,
@@ -697,19 +705,27 @@ export async function createGoal(
   database: AppDatabase,
   input: {
     name: string;
-    target: number;
+    target?: number;
+    targetMinor?: number;
     current?: number;
+    currentMinor?: number;
     currencyCode: string;
     accountId?: string | null;
     deadlineAt?: Date | null;
   }
 ) {
   const id = createId();
+  const targetMinor = input.targetMinor !== undefined
+    ? input.targetMinor
+    : toMinorUnits(input.target ?? 0, input.currencyCode);
+  const currentMinor = input.currentMinor !== undefined
+    ? input.currentMinor
+    : toMinorUnits(input.current ?? 0, input.currencyCode);
   await database.insert(goals).values({
     id,
     name: input.name.trim(),
-    targetMinor: toMinorUnits(input.target, input.currencyCode),
-    currentMinor: toMinorUnits(input.current ?? 0, input.currencyCode),
+    targetMinor,
+    currentMinor,
     currencyCode: input.currencyCode,
     accountId: input.accountId ?? null,
     deadlineAt: input.deadlineAt ?? null,
@@ -729,17 +745,20 @@ export async function softDeleteGoal(database: AppDatabase, id: string) {
 export async function addGoalContribution(
   database: AppDatabase,
   id: string,
-  amount: number,
-  currencyCode: string
+  amount?: number,
+  amountMinor?: number,
+  currencyCode?: string
 ) {
-  if (!(amount > 0)) return;
   const [row] = await database
     .select()
     .from(goals)
     .where(and(eq(goals.id, id), isNull(goals.deletedAt)))
     .limit(1);
   if (!row) return;
-  const delta = toMinorUnits(amount, currencyCode);
+  const delta = amountMinor !== undefined && amountMinor > 0
+    ? amountMinor
+    : toMinorUnits(amount ?? 0, currencyCode ?? row.currencyCode);
+  if (delta <= 0) return;
   await database
     .update(goals)
     .set({
@@ -800,7 +819,8 @@ export async function createSubscription(
     accountId: string;
     categoryId?: string | null;
     name: string;
-    amount: number;
+    amount?: number;
+    amountMinor?: number;
     currencyCode: string;
     cadence: 'weekly' | 'monthly' | 'yearly';
     nextBillingAt?: Date;
@@ -809,12 +829,15 @@ export async function createSubscription(
 ) {
   const id = createId();
   const due = startOfDay(new Date());
+  const amountMinor = input.amountMinor !== undefined
+    ? input.amountMinor
+    : toMinorUnits(input.amount ?? 0, input.currencyCode);
   await database.insert(subscriptions).values({
     id,
     accountId: input.accountId,
     categoryId: input.categoryId ?? null,
     name: input.name.trim(),
-    amountMinor: toMinorUnits(input.amount, input.currencyCode),
+    amountMinor,
     currencyCode: input.currencyCode,
     cadence: input.cadence,
     nextBillingAt: due,
@@ -888,8 +911,10 @@ export async function createDebt(
   input: {
     name: string;
     kind: 'owed_to_me' | 'i_owe';
-    principal: number;
+    principal?: number;
+    principalMinor?: number;
     remaining?: number;
+    remainingMinor?: number;
     currencyCode: string;
     accountId?: string | null;
     counterparty?: string;
@@ -898,16 +923,21 @@ export async function createDebt(
   }
 ) {
   const id = createId();
-  const principalMinor = toMinorUnits(input.principal, input.currencyCode);
+  const principalMinor = input.principalMinor !== undefined
+    ? input.principalMinor
+    : toMinorUnits(input.principal ?? 0, input.currencyCode);
+  const remainingMinor = input.remainingMinor !== undefined
+    ? input.remainingMinor
+    : toMinorUnits(
+      input.remaining ?? input.principal ?? 0,
+      input.currencyCode
+    );
   await database.insert(debts).values({
     id,
     name: input.name.trim(),
     kind: input.kind,
     principalMinor,
-    remainingMinor: toMinorUnits(
-      input.remaining ?? input.principal,
-      input.currencyCode
-    ),
+    remainingMinor,
     currencyCode: input.currencyCode,
     accountId: input.accountId ?? null,
     counterparty: input.counterparty?.trim() || null,
@@ -1002,8 +1032,9 @@ export async function softDeleteCategory(database: AppDatabase, id: string) {
 export async function recordDebtPayment(
   database: AppDatabase,
   id: string,
-  amount: number,
-  currencyCode: string
+  amount?: number,
+  amountMinor?: number,
+  currencyCode?: string
 ) {
   const [row] = await database
     .select()
@@ -1011,7 +1042,10 @@ export async function recordDebtPayment(
     .where(and(eq(debts.id, id), isNull(debts.deletedAt)))
     .limit(1);
   if (!row) return;
-  const delta = toMinorUnits(amount, currencyCode);
+  const delta = amountMinor !== undefined && amountMinor > 0
+    ? amountMinor
+    : toMinorUnits(amount ?? 0, currencyCode ?? row.currencyCode);
+  if (delta <= 0) return;
   await database
     .update(debts)
     .set({

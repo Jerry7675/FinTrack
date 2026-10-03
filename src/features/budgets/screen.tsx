@@ -26,7 +26,7 @@ import {
 } from '@/lib/db/queries';
 import type { Budget, Category } from '@/lib/db/schema';
 import { layout } from '@/lib/layout';
-import { formatMoney, fromMinorUnits, parseAmountToMinor } from '@/lib/money';
+import { formatMoney, parseAmountToMinor } from '@/lib/money';
 import {
   type BudgetPeriod,
   budgetDaysRemaining,
@@ -87,7 +87,7 @@ export function BudgetsScreen() {
     await createBudget(db, {
       name: name.trim(),
       categoryId,
-      amount: fromMinorUnits(amountMinor, currency),
+      amountMinor,
       currencyCode: currency,
       period,
     });

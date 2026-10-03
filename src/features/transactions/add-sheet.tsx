@@ -159,7 +159,7 @@ export function AddTransactionSheet({ visible, onClose, onSaved }: Props) {
           accountId: account.id,
           categoryId: values.categoryId,
           type: values.mode,
-          amount: fromMinorUnits(amountMinor, currency),
+          amountMinor,
           currencyCode: account.currencyCode,
           title: values.title.trim(),
           note: values.note,

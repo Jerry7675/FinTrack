@@ -17,11 +17,17 @@ describe('parseAmountToMinor', () => {
     it('parses amounts with thousand separators', () => {
       expect(parseAmountToMinor('1,234.56', 'USD')).toBe(123456);
       expect(parseAmountToMinor('10,000.00', 'USD')).toBe(1000000);
+      expect(parseAmountToMinor('1,234,567.89', 'USD')).toBe(123456789);
     });
 
     it('parses integer amounts', () => {
       expect(parseAmountToMinor('100', 'USD')).toBe(10000);
       expect(parseAmountToMinor('5', 'USD')).toBe(500);
+    });
+
+    it('handles leading/trailing periods', () => {
+      expect(parseAmountToMinor('.5', 'USD')).toBe(50);
+      expect(parseAmountToMinor('5.', 'USD')).toBe(500);
     });
   });
 
@@ -34,13 +40,102 @@ describe('parseAmountToMinor', () => {
     it('parses amounts with period thousand separators', () => {
       expect(parseAmountToMinor('1.234,56', 'EUR')).toBe(123456);
       expect(parseAmountToMinor('10.000,00', 'EUR')).toBe(1000000);
+      expect(parseAmountToMinor('1.234.567,89', 'EUR')).toBe(123456789);
+    });
+
+    it('handles ambiguous single comma (1,234 as thousands for USD)', () => {
+      expect(parseAmountToMinor('1,234', 'USD')).toBe(123400);
+    });
+
+    it('handles single comma with 1-2 digits as decimal', () => {
+      expect(parseAmountToMinor('1,5', 'EUR')).toBe(150);
+      expect(parseAmountToMinor('0,5', 'USD')).toBe(50);
     });
   });
 
-  describe('edge cases - problem case 1.005', () => {
-    it('handles 1.005 correctly by truncating to currency decimals', () => {
-      expect(parseAmountToMinor('1.005', 'USD')).toBe(100);
-      expect(parseAmountToMinor('1.009', 'USD')).toBe(100);
+  describe('precision and truncation rules', () => {
+    it('rejects amounts with non-zero digits beyond currency decimals', () => {
+      expect(parseAmountToMinor('1.005', 'USD')).toBeNull();
+      expect(parseAmountToMinor('1.009', 'USD')).toBeNull();
+      expect(parseAmountToMinor('1.1234', 'USD')).toBeNull();
+    });
+
+    it('accepts trailing zeros beyond currency decimals', () => {
+      expect(parseAmountToMinor('1.50000', 'USD')).toBe(150);
+      expect(parseAmountToMinor('10.000', 'USD')).toBe(1000);
+      expect(parseAmountToMinor('1000.00', 'JPY')).toBe(1000);
+    });
+
+    it('rejects JPY amounts with non-zero decimals', () => {
+      expect(parseAmountToMinor('1000.50', 'JPY')).toBeNull();
+      expect(parseAmountToMinor('500.01', 'JPY')).toBeNull();
+    });
+
+    it('accepts JPY amounts with zero decimals', () => {
+      expect(parseAmountToMinor('1000.00', 'JPY')).toBe(1000);
+      expect(parseAmountToMinor('1000.000', 'JPY')).toBe(1000);
+    });
+  });
+
+  describe('currency symbols and whitespace', () => {
+    it('strips leading currency symbols', () => {
+      expect(parseAmountToMinor('$100', 'USD')).toBe(10000);
+      expect(parseAmountToMinor('€50.99', 'EUR')).toBe(5099);
+      expect(parseAmountToMinor('£25.50', 'GBP')).toBe(2550);
+      expect(parseAmountToMinor('¥1000', 'JPY')).toBe(1000);
+    });
+
+    it('strips trailing currency symbols', () => {
+      expect(parseAmountToMinor('100$', 'USD')).toBe(10000);
+      expect(parseAmountToMinor('50.99€', 'EUR')).toBe(5099);
+    });
+
+    it('strips currency codes', () => {
+      expect(parseAmountToMinor('USD 100', 'USD')).toBe(10000);
+      expect(parseAmountToMinor('100 USD', 'USD')).toBe(10000);
+      expect(parseAmountToMinor('EUR 50.99', 'EUR')).toBe(5099);
+    });
+
+    it('handles leading/trailing spaces', () => {
+      expect(parseAmountToMinor('  100.50  ', 'USD')).toBe(10050);
+      expect(parseAmountToMinor('  $100.50  ', 'USD')).toBe(10050);
+    });
+  });
+
+  describe('invalid input - stray characters', () => {
+    it('rejects amounts with letters', () => {
+      expect(parseAmountToMinor('1a2', 'USD')).toBeNull();
+      expect(parseAmountToMinor('12a', 'USD')).toBeNull();
+      expect(parseAmountToMinor('a12', 'USD')).toBeNull();
+    });
+
+    it('rejects multiple decimal points', () => {
+      expect(parseAmountToMinor('1.2.3', 'USD')).toBeNull();
+      expect(parseAmountToMinor('1..5', 'USD')).toBeNull();
+    });
+  });
+
+  describe('sign handling', () => {
+    it('parses negative amounts', () => {
+      expect(parseAmountToMinor('-10.50', 'USD')).toBe(-1050);
+      expect(parseAmountToMinor('-1,234.56', 'USD')).toBe(-123456);
+      expect(parseAmountToMinor('-5,50', 'EUR')).toBe(-550);
+    });
+
+    it('handles negative zero', () => {
+      expect(parseAmountToMinor('-0', 'USD')).toBe(0);
+      expect(parseAmountToMinor('-0.00', 'USD')).toBe(0);
+    });
+
+    it('handles positive sign', () => {
+      expect(parseAmountToMinor('+5', 'USD')).toBe(500);
+      expect(parseAmountToMinor('+10.50', 'USD')).toBe(1050);
+    });
+
+    it('rejects multiple signs', () => {
+      expect(parseAmountToMinor('--5', 'USD')).toBeNull();
+      expect(parseAmountToMinor('+-5', 'USD')).toBeNull();
+      expect(parseAmountToMinor('5-', 'USD')).toBeNull();
     });
   });
 
@@ -57,18 +152,20 @@ describe('parseAmountToMinor', () => {
     });
   });
 
-  describe('negative values', () => {
-    it('parses negative amounts', () => {
-      expect(parseAmountToMinor('-10.50', 'USD')).toBe(-1050);
-      expect(parseAmountToMinor('-1,234.56', 'USD')).toBe(-123456);
-      expect(parseAmountToMinor('-5,50', 'EUR')).toBe(-550);
-    });
-  });
-
-  describe('very large values', () => {
-    it('handles large amounts without precision loss', () => {
+  describe('very large values and precision limits', () => {
+    it('handles large amounts within safe integer range', () => {
       expect(parseAmountToMinor('999999999.99', 'USD')).toBe(99999999999);
       expect(parseAmountToMinor('1000000000', 'USD')).toBe(100000000000);
+    });
+
+    it('rejects amounts exceeding MAX_SAFE_INTEGER', () => {
+      const maxSafe = Number.MAX_SAFE_INTEGER;
+      const tooLarge = (maxSafe + 1).toString();
+      expect(parseAmountToMinor(tooLarge, 'JPY')).toBeNull();
+    });
+
+    it('handles very long digit strings', () => {
+      expect(parseAmountToMinor('12345678901234', 'JPY')).toBe(12345678901234);
     });
   });
 
@@ -78,27 +175,12 @@ describe('parseAmountToMinor', () => {
       expect(parseAmountToMinor('500', 'JPY')).toBe(500);
       expect(parseAmountToMinor('1,234', 'JPY')).toBe(1234);
     });
-
-    it('ignores decimal part for JPY', () => {
-      expect(parseAmountToMinor('1000.50', 'JPY')).toBe(1000);
-      expect(parseAmountToMinor('500,75', 'JPY')).toBe(500);
-    });
   });
 
-  describe('invalid input', () => {
-    it('returns null for invalid formats', () => {
-      expect(parseAmountToMinor('abc', 'USD')).toBeNull();
-      expect(parseAmountToMinor('1.2.3', 'USD')).toBeNull();
-      expect(parseAmountToMinor('-', 'USD')).toBeNull();
-      expect(parseAmountToMinor('$100', 'USD')).toBe(10000);
-    });
-  });
-
-  describe('currency symbols and extra characters', () => {
-    it('strips currency symbols and extra characters', () => {
-      expect(parseAmountToMinor('$100.50', 'USD')).toBe(10050);
-      expect(parseAmountToMinor('€50,99', 'EUR')).toBe(5099);
-      expect(parseAmountToMinor('¥1000', 'JPY')).toBe(1000);
+  describe('edge cases from Indian formatting', () => {
+    it('handles irregular comma grouping (12,34,567)', () => {
+      expect(parseAmountToMinor('12,34,567', 'INR')).toBe(123456700);
+      expect(parseAmountToMinor('12,34,567.89', 'INR')).toBe(123456789);
     });
   });
 });
@@ -153,14 +235,14 @@ describe('getCurrency', () => {
   });
 });
 
-describe('toMinorUnits (legacy)', () => {
+describe('toMinorUnits (legacy float-based)', () => {
   it('converts float to minor units', () => {
     expect(toMinorUnits(1.5, 'USD')).toBe(150);
     expect(toMinorUnits(10.99, 'USD')).toBe(1099);
     expect(toMinorUnits(1000, 'JPY')).toBe(1000);
   });
 
-  it('rounds to nearest integer', () => {
+  it('demonstrates float precision issue with 1.005', () => {
     expect(toMinorUnits(1.005, 'USD')).toBe(100);
   });
 });
@@ -173,7 +255,7 @@ describe('fromMinorUnits', () => {
   });
 });
 
-describe('round-trip conversion', () => {
+describe('round-trip conversion with new parser', () => {
   it('parseAmountToMinor -> formatMinorToDecimal preserves value', () => {
     const input = '123.45';
     const minor = parseAmountToMinor(input, 'USD');
@@ -196,5 +278,12 @@ describe('round-trip conversion', () => {
     expect(minor).not.toBeNull();
     const output = formatMinorToDecimal(minor as number, 'JPY');
     expect(output).toBe('1000');
+  });
+
+  it('handles very large amounts', () => {
+    const input = '999999999.99';
+    const minor = parseAmountToMinor(input, 'USD');
+    expect(minor).not.toBeNull();
+    expect(toMinorUnits(fromMinorUnits(minor as number, 'USD'), 'USD')).toBe(minor);
   });
 });
