@@ -28,7 +28,7 @@ import {
   transactions,
   transactionTags,
 } from '@/lib/db/schema';
-import { fromMinorUnits, parseAmountToMinor } from '@/lib/money';
+import { parseAmountToMinor } from '@/lib/money';
 
 export const BACKUP_SCHEMA_VERSION = 1;
 export const ENC_PREFIX = 'FTENC2';
@@ -322,7 +322,7 @@ function parseCsvLine(line: string): string[] {
 export type CsvImportPreview = {
   rows: {
     type: 'expense' | 'income';
-    amount: number;
+    amountMinor: number;
     title: string;
     note?: string;
     occurredAt: Date;
@@ -370,7 +370,7 @@ export function parseTransactionsCsv(
       typeRaw === 'income' ? 'income' : 'expense';
     const currencyCode = (cols[currencyIdx] || defaultCurrency).toUpperCase();
 
-    let amount: number;
+    let amountMinor: number;
     if (isMinor) {
       const rawAmount = cols[amountIdx] ?? '';
       if (!/^-?\d+$/.test(rawAmount.trim())) {
@@ -382,15 +382,17 @@ export function parseTransactionsCsv(
         skipped += 1;
         continue;
       }
-      amount = fromMinorUnits(Math.abs(parsedMinor), currencyCode);
+      amountMinor = Math.abs(parsedMinor);
     } else {
       const amountStr = cols[amountIdx] ?? '';
-      const amountMinor = parseAmountToMinor(amountStr, currencyCode);
-      if (amountMinor === null) {
+      const isNegative = amountStr.trim().startsWith('-');
+      const cleanedAmount = isNegative ? amountStr.trim().slice(1) : amountStr;
+      const parsedMinor = parseAmountToMinor(cleanedAmount, currencyCode);
+      if (parsedMinor === null) {
         skipped += 1;
         continue;
       }
-      amount = fromMinorUnits(Math.abs(amountMinor), currencyCode);
+      amountMinor = Math.abs(parsedMinor);
     }
 
     const title = cols[titleIdx]?.trim() || 'Imported';
@@ -401,7 +403,7 @@ export function parseTransactionsCsv(
       skipped += 1;
       continue;
     }
-    rows.push({ type, amount, title, note, occurredAt, currencyCode });
+    rows.push({ type, amountMinor, title, note, occurredAt, currencyCode });
   }
 
   return { rows, skipped };
@@ -424,7 +426,7 @@ export async function pickAndImportTransactionsCsv(input: {
     await createTransaction(db, {
       accountId: input.accountId,
       type: row.type,
-      amount: row.amount,
+      amountMinor: row.amountMinor,
       currencyCode: row.currencyCode || input.defaultCurrency,
       title: row.title,
       note: row.note,

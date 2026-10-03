@@ -165,7 +165,8 @@ describe('parseAmountToMinor', () => {
     });
 
     it('handles very long digit strings', () => {
-      expect(parseAmountToMinor('12345678901234', 'JPY')).toBe(12345678901234);
+      expect(parseAmountToMinor('9999999999999', 'JPY')).toBe(9999999999999);
+      expect(parseAmountToMinor('10000000000001', 'JPY')).toBeNull();
     });
   });
 
@@ -210,6 +211,32 @@ describe('parseAmountToMinor - malformed thousands separators', () => {
   it('rejects lone period/comma', () => {
     expect(parseAmountToMinor('.', 'USD')).toBeNull();
     expect(parseAmountToMinor(',', 'USD')).toBeNull();
+  });
+
+  it('normalizes regular spaces between digit groups', () => {
+    expect(parseAmountToMinor('1 234,56', 'EUR')).toBe(123456);
+    expect(parseAmountToMinor('1 234.56', 'USD')).toBe(123456);
+  });
+
+  it('normalizes NBSP (U+00A0) between digit groups', () => {
+    expect(parseAmountToMinor('1\u00A0234,56', 'EUR')).toBe(123456);
+    expect(parseAmountToMinor('1\u00A0234.56', 'USD')).toBe(123456);
+  });
+
+  it('normalizes narrow NBSP (U+202F) between digit groups', () => {
+    expect(parseAmountToMinor('1\u202F234,56', 'EUR')).toBe(123456);
+    expect(parseAmountToMinor('1\u202F234.56', 'USD')).toBe(123456);
+  });
+
+  it('enforces MAX_MINOR limit', () => {
+    expect(parseAmountToMinor('100000000000.00', 'USD')).toBeNull();
+    expect(parseAmountToMinor('99999999999.99', 'USD')).toBe(9999999999999);
+  });
+
+  it('rejects symbol-sign combinations like $-5 and €-5', () => {
+    expect(parseAmountToMinor('$-5', 'USD')).toBeNull();
+    expect(parseAmountToMinor('€-5', 'EUR')).toBeNull();
+    expect(parseAmountToMinor('£-10.50', 'GBP')).toBeNull();
   });
 });
 

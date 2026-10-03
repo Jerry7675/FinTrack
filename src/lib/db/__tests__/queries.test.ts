@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import type { AppDatabase } from '@/lib/db/client';
-import { createTransaction } from '@/lib/db/queries';
+import { createGoal, createTransaction } from '@/lib/db/queries';
 
 describe('createTransaction', () => {
   let mockDatabase: AppDatabase;
@@ -97,5 +97,24 @@ describe('createTransaction', () => {
         title: 'Should fail',
       })
     ).rejects.toThrow();
+  });
+});
+
+describe('createGoal', () => {
+  it('rejects negative starting amounts', async () => {
+    const mockDb = {
+      insert: jest.fn().mockReturnValue({
+        values: jest.fn(),
+      }),
+    } as unknown as AppDatabase;
+
+    await expect(
+      createGoal(mockDb, {
+        name: 'My Goal',
+        targetMinor: 10000,
+        currentMinor: -500,
+        currencyCode: 'USD',
+      })
+    ).rejects.toThrow('Starting amount cannot be negative');
   });
 });
