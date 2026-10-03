@@ -1,7 +1,7 @@
 /**
  * Test that palette.ts and tailwind.config.js stay in sync.
  */
-const fs = require('fs');
+const fs = require('node:fs');
 const path = require('node:path');
 
 describe('palette sync', () => {
