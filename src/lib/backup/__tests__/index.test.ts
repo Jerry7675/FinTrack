@@ -1,10 +1,10 @@
 import {
-  type BackupPayload,
   BACKUP_SCHEMA_VERSION,
-  ENC_PREFIX,
-  MIN_BACKUP_PASSWORD_LENGTH,
+  type BackupPayload,
   decryptBackupPayload,
+  ENC_PREFIX,
   encryptBackupPayload,
+  MIN_BACKUP_PASSWORD_LENGTH,
   parseTransactionsCsv,
 } from '@/lib/backup';
 
@@ -242,7 +242,10 @@ describe('decryptBackupPayload', () => {
       },
     };
 
-    const encrypted = await encryptBackupPayload(samplePayload, 'correct-password');
+    const encrypted = await encryptBackupPayload(
+      samplePayload,
+      'correct-password'
+    );
 
     await expect(
       decryptBackupPayload(encrypted, 'wrong-password')
@@ -273,9 +276,9 @@ describe('decryptBackupPayload', () => {
     const password = 'test-password';
     const encrypted = await encryptBackupPayload(futurePayload, password);
 
-    await expect(
-      decryptBackupPayload(encrypted, password)
-    ).rejects.toThrow(/version/i);
+    await expect(decryptBackupPayload(encrypted, password)).rejects.toThrow(
+      /version/i
+    );
   });
 });
 
