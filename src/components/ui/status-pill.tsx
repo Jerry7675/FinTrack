@@ -29,7 +29,6 @@ export function StatusPill({
       className='flex-row items-center gap-1.5 rounded-full px-3 py-1.5'
       style={{ backgroundColor: config.bg }}
       accessibilityRole='text'
-      accessibilityLiveRegion='polite'
       accessibilityLabel={text}
     >
       <Ionicons name={icon} size={scale(14)} color={config.fg} />

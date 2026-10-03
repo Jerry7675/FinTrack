@@ -14,7 +14,12 @@ export function BudgetBar({
   currency: string;
 }) {
   const c = useThemeColors();
-  const ratio = limitMinor > 0 ? spentMinor / limitMinor : 0;
+  
+  // Clamp negative spent to zero
+  const clampedSpent = Math.max(0, spentMinor);
+  
+  // Handle limit 0: treat as no budget set, show 0 left
+  const ratio = limitMinor > 0 ? clampedSpent / limitMinor : 0;
   const percentage = Math.min(ratio * 100, 100);
 
   const isOver = ratio >= 1;
@@ -22,12 +27,12 @@ export function BudgetBar({
 
   const state = isOver ? 'over' : isNear ? 'near' : 'ok';
   const config = {
-    ok: { color: c.income, icon: 'checkmark-circle' as const, text: 'left' },
-    near: { color: c.warning, icon: 'alert-circle' as const, text: 'left' },
-    over: { color: c.expense, icon: 'warning' as const, text: 'Over by' },
+    ok: { color: c.income, icon: 'checkmark-circle' as const, label: 'left' },
+    near: { color: c.warning, icon: 'alert-circle' as const, label: 'Close to limit' },
+    over: { color: c.expense, icon: 'warning' as const, label: 'Over by' },
   }[state];
 
-  const remaining = limitMinor - spentMinor;
+  const remaining = limitMinor - clampedSpent;
   const displayAmount = isOver
     ? formatMoney(Math.abs(remaining), currency)
     : formatMoney(remaining, currency);
@@ -37,9 +42,11 @@ export function BudgetBar({
       <View className='flex-row items-center gap-2'>
         <Ionicons name={config.icon} size={scale(16)} color={config.color} />
         <AppText size='sm' weight='medium' style={{ color: config.color }}>
-          {isOver
-            ? `${config.text} ${displayAmount}`
-            : `${displayAmount} ${config.text}`}
+          {isNear
+            ? `${displayAmount} left · ${config.label}`
+            : isOver
+              ? `${config.label} ${displayAmount}`
+              : `${displayAmount} ${config.label}`}
         </AppText>
       </View>
       <View

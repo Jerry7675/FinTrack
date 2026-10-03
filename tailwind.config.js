@@ -34,7 +34,7 @@ module.exports = {
           'dark-soft': '#1D3646',
         },
         income: {
-          DEFAULT: '#047857',
+          DEFAULT: '#065F46',
           soft: '#D9F4E8',
           dark: '#00F59B',
           'dark-soft': '#153A35',

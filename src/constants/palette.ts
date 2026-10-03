@@ -13,7 +13,7 @@ export const palette = {
     surfaceHigh: '#E3E8EE',
     accent: '#0369A1',
     accentSoft: '#E6F0F6',
-    income: '#047857',
+    income: '#065F46',
     incomeSoft: '#D9F4E8',
     expense: '#BE123C',
     expenseSoft: '#F8E1E7',

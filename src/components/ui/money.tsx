@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { View } from 'react-native';
 import { scale } from '@/lib/layout';
-import { formatMoney } from '@/lib/money';
+import { formatMoney, getCurrency } from '@/lib/money';
 import { AppText, useThemeColors } from './primitives';
 
 export type MoneyTone = 'auto' | 'neutral' | 'income' | 'expense';
@@ -42,23 +42,30 @@ export function Money({
         ? c.expense
         : c.ink;
 
+  // Sign and arrow always reflect the value
   const displayValue =
-    showSign && !isNegative && !isZero ? `+${formatted}` : formatted;
+    isNegative ? formatted : !isZero ? `+${formatted}` : formatted;
 
-  const spokenSign = isNegative ? 'minus' : showSign && !isZero ? 'plus' : '';
-  const parts = Math.abs(minor)
-    .toString()
-    .padStart(3, '0')
-    .match(/^(.*)(\d{2})$/);
-  const dollars = parts ? Number.parseInt(parts[1], 10) : 0;
-  const cents = parts ? parts[2] : '00';
-  const accessibilityLabel =
-    `${spokenSign} ${dollars} ${currency === 'USD' ? 'dollars' : currency} ${cents === '00' ? '' : `and ${cents} cents`}`.trim();
+  // Build accessible label using actual currency properties
+  const currencyInfo = getCurrency(currency);
+  const absValue = Math.abs(minor);
+  const majorUnits = Math.floor(absValue / 10 ** currencyInfo.decimals);
+  const minorUnits = absValue % 10 ** currencyInfo.decimals;
+
+  let accessibilityLabel = isNegative ? 'minus ' : !isZero ? 'plus ' : '';
+  accessibilityLabel += `${majorUnits} ${currencyInfo.name}`;
+  
+  if (currencyInfo.decimals > 0 && minorUnits > 0) {
+    // For currencies with decimals, add fractional part
+    const minorString = minorUnits.toString().padStart(currencyInfo.decimals, '0');
+    const minorLabel = currencyInfo.decimals === 2 ? 'cents' : currencyInfo.code;
+    accessibilityLabel += ` and ${minorString} ${minorLabel}`;
+  }
 
   return (
     <View
       className='flex-row items-center gap-1.5'
-      accessibilityLabel={accessibilityLabel}
+      accessibilityLabel={accessibilityLabel.trim()}
       accessibilityRole='text'
     >
       {icon ? (

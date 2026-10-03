@@ -51,7 +51,7 @@ export const categories = sqliteTable('categories', {
   name: text('name').notNull(),
   kind: text('kind', { enum: ['expense', 'income'] }).notNull(),
   iconKey: text('icon_key').notNull().default('ellipse'),
-  color: text('color').notNull().default('#38BDF8'),
+  color: text('color').notNull().default('#1A7A4C'),
   isDefault: integer('is_default', { mode: 'boolean' })
     .notNull()
     .default(false),
