@@ -82,5 +82,5 @@ export function moneyA11yLabel(minor: number, currencyCode: string): string {
 
   // Build label: "minus 5.20 USD" or "plus 12.00 NPR" or "0.00 USD"
   const sign = isNegative ? 'minus ' : !isZero ? 'plus ' : '';
-  return `${sign}${formattedValue} ${currency.code}`;
+  return `${sign}${formattedValue} ${currencyCode.toUpperCase()}`;
 }
