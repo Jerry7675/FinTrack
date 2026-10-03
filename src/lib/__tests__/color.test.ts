@@ -291,7 +291,7 @@ describe('ensureContrast', () => {
 
 describe('default category colors are unique', () => {
   // Import actual categories to test - use dynamic import to get the real values
-  const DEFAULT_CATEGORIES =
+  const DEFAULT_CATEGORIES: Array<{ name: string; color: string }> =
     require('@/lib/categories/icons').DEFAULT_CATEGORIES;
 
   it('all category colors are unique', () => {
