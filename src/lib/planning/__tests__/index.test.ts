@@ -139,7 +139,9 @@ describe('computeNextDueAt', () => {
 
   it('computes next due for custom cadence', () => {
     const next = computeNextDueAt('custom', 14, base);
-    const daysDiff = Math.round((next.getTime() - base.getTime()) / (24 * 60 * 60 * 1000));
+    const daysDiff = Math.round(
+      (next.getTime() - base.getTime()) / (24 * 60 * 60 * 1000)
+    );
     expect(daysDiff).toBe(14);
   });
 
