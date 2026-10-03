@@ -22,6 +22,7 @@ import Svg, { Circle } from 'react-native-svg';
 
 import { colors } from '@/constants/palette';
 import { resolveCategoryIcon } from '@/lib/categories/icons';
+import { ensureContrast } from '@/lib/color';
 import { fontSize, scale, vs } from '@/lib/layout';
 import { useApp } from '@/providers/app-provider';
 
@@ -501,7 +502,6 @@ export function CategoryGlyph({
 }) {
   const c = useThemeColors();
   const dim = scale(size);
-  const { ensureContrast } = require('@/lib/color');
   const adjustedColor = ensureContrast(color, c.surfaceRaised, 3);
 
   return (
@@ -839,6 +839,8 @@ export function Chip({
         borderWidth: active ? 0 : 1,
         borderColor: c.line,
       }}
+      accessibilityRole='button'
+      accessibilityState={{ selected: !!active }}
     >
       {icon ? (
         <Ionicons
