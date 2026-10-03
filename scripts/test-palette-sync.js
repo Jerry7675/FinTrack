@@ -10,32 +10,33 @@ const path = require('node:path');
 
 const paletteTs = fs.readFileSync(
   path.join(__dirname, '../src/constants/palette.ts'),
-  'utf-8',
+  'utf-8'
 );
 const tailwindJs = fs.readFileSync(
   path.join(__dirname, '../tailwind.config.js'),
-  'utf-8',
+  'utf-8'
 );
 
 const hexPattern = /#[0-9A-Fa-f]{6}/g;
 
 const paletteColors = [...paletteTs.matchAll(hexPattern)].map((m) =>
-  m[0].toUpperCase(),
+  m[0].toUpperCase()
 );
 const tailwindColors = [...tailwindJs.matchAll(hexPattern)].map((m) =>
-  m[0].toUpperCase(),
+  m[0].toUpperCase()
 );
 
 const paletteSet = new Set(paletteColors);
 const tailwindSet = new Set(tailwindColors);
 
 // Extract semantic token names (ink, surface, accent, income, expense, warning, line)
-const tokenNamePattern = /^\s*(ink|surface|accent|income|expense|warning|line)/gm;
+const tokenNamePattern =
+  /^\s*(ink|surface|accent|income|expense|warning|line)/gm;
 const paletteTokens = new Set(
-  [...paletteTs.matchAll(tokenNamePattern)].map((m) => m[1]),
+  [...paletteTs.matchAll(tokenNamePattern)].map((m) => m[1])
 );
 const tailwindTokens = new Set(
-  [...tailwindJs.matchAll(tokenNamePattern)].map((m) => m[1]),
+  [...tailwindJs.matchAll(tokenNamePattern)].map((m) => m[1])
 );
 
 let passed = true;
@@ -45,7 +46,7 @@ const errors = [];
 for (const color of paletteSet) {
   if (!tailwindSet.has(color)) {
     errors.push(
-      `Color ${color} is in palette.ts but not in tailwind.config.js`,
+      `Color ${color} is in palette.ts but not in tailwind.config.js`
     );
     passed = false;
   }
@@ -54,7 +55,7 @@ for (const color of paletteSet) {
 for (const color of tailwindSet) {
   if (!paletteSet.has(color)) {
     errors.push(
-      `Color ${color} is in tailwind.config.js but not in palette.ts`,
+      `Color ${color} is in tailwind.config.js but not in palette.ts`
     );
     passed = false;
   }
@@ -64,7 +65,7 @@ for (const color of tailwindSet) {
 for (const token of paletteTokens) {
   if (!tailwindTokens.has(token)) {
     errors.push(
-      `Token '${token}' is in palette.ts but not in tailwind.config.js`,
+      `Token '${token}' is in palette.ts but not in tailwind.config.js`
     );
     passed = false;
   }
@@ -73,7 +74,7 @@ for (const token of paletteTokens) {
 for (const token of tailwindTokens) {
   if (!paletteTokens.has(token)) {
     errors.push(
-      `Token '${token}' is in tailwind.config.js but not in palette.ts`,
+      `Token '${token}' is in tailwind.config.js but not in palette.ts`
     );
     passed = false;
   }
@@ -82,7 +83,7 @@ for (const token of tailwindTokens) {
 if (passed) {
   console.log('✓ palette.ts and tailwind.config.js are in sync');
   console.log(
-    `  Found ${paletteSet.size} unique colors and ${paletteTokens.size} token families`,
+    `  Found ${paletteSet.size} unique colors and ${paletteTokens.size} token families`
   );
   process.exit(0);
 } else {

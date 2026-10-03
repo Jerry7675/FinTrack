@@ -1,7 +1,7 @@
 /**
  * Ensure a color meets minimum contrast ratio against a background by adjusting lightness only.
  * Used at render time for user-selected category colors.
- * 
+ *
  * Strategy: Lighten when background is dark, darken when background is light.
  * Returns the closest passing lightness value, preserving hue and saturation.
  * Falls back to black/white only if no adjustment passes.
@@ -9,7 +9,7 @@
 export function ensureContrast(
   hex: string,
   bgHex: string,
-  minRatio = 3,
+  minRatio = 3
 ): string {
   const fg = hexToRgb(hex);
   const bg = hexToRgb(bgHex);
@@ -21,68 +21,65 @@ export function ensureContrast(
 
   const hsl = rgbToHsl(fg);
   const bgLuminance = luminance(bg);
-  
+
   // Determine direction based on background luminance
   // Light background (>0.5): darken the foreground
   // Dark background (<=0.5): lighten the foreground
   const shouldLighten = bgLuminance <= 0.5;
-  
-  let bestL = hsl.l;
-  let bestRatio = currentRatio;
-  let passingFound = false;
+
+  let bestL: number | null = null;
 
   // Binary search for the closest passing lightness
   let low = shouldLighten ? hsl.l : 0;
   let high = shouldLighten ? 1 : hsl.l;
 
-  for (let i = 0; i < 30; i++) {
+  for (let i = 0; i < 50; i++) {
     const testL = (low + high) / 2;
     const testRgb = hslToRgb({ ...hsl, l: testL });
     const ratio = contrastRatio(testRgb, bg);
 
-    if (ratio >= minRatio) {
-      passingFound = true;
-      // Keep the closest passing value to the original
-      if (Math.abs(testL - hsl.l) < Math.abs(bestL - hsl.l) || !passingFound) {
+    if (ratio >= minRatio - 0.001) {
+      // This lightness passes (with tiny tolerance for floating point precision)
+      if (bestL === null || Math.abs(testL - hsl.l) < Math.abs(bestL - hsl.l)) {
         bestL = testL;
-        bestRatio = ratio;
       }
-      // Narrow search toward original
+      // Move closer to original
       if (shouldLighten) {
         high = testL;
       } else {
         low = testL;
       }
     } else {
-      // Move away from original
+      // This lightness fails, move away from original
       if (shouldLighten) {
         low = testL;
       } else {
         high = testL;
       }
     }
+  }
+
+  // If we found a passing lightness, use it
+  if (bestL !== null) {
+    const adjusted = hslToRgb({ ...hsl, l: bestL });
+    return rgbToHex(adjusted);
   }
 
   // If no adjustment passes, fall back to black or white
-  if (!passingFound) {
-    const whiteRatio = contrastRatio({ r: 1, g: 1, b: 1 }, bg);
-    const blackRatio = contrastRatio({ r: 0, g: 0, b: 0 }, bg);
-    
-    if (whiteRatio >= minRatio && blackRatio >= minRatio) {
-      // Both pass, choose closer to original
-      bestL = shouldLighten ? 1 : 0;
-    } else if (whiteRatio >= minRatio) {
-      bestL = 1;
-    } else if (blackRatio >= minRatio) {
-      bestL = 0;
-    } else {
-      // Neither passes (shouldn't happen with valid backgrounds), return original
-      return hex;
-    }
+  const whiteRatio = contrastRatio({ r: 1, g: 1, b: 1 }, bg);
+  const blackRatio = contrastRatio({ r: 0, g: 0, b: 0 }, bg);
+
+  if (whiteRatio >= minRatio && blackRatio >= minRatio) {
+    // Both pass, choose closer to original lightness
+    return hsl.l > 0.5 ? '#FFFFFF' : '#000000';
+  } else if (whiteRatio >= minRatio) {
+    return '#FFFFFF';
+  } else if (blackRatio >= minRatio) {
+    return '#000000';
   }
 
-  const adjusted = hslToRgb({ ...hsl, l: bestL });
-  return rgbToHex(adjusted);
+  // Neither passes (shouldn't happen with valid backgrounds), return original
+  return hex;
 }
 
 function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
@@ -105,14 +102,14 @@ function rgbToHex(rgb: { r: number; g: number; b: number }): string {
 
 export function luminance(rgb: { r: number; g: number; b: number }): number {
   const [r, g, b] = [rgb.r, rgb.g, rgb.b].map((v) =>
-    v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4,
+    v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4
   );
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
 
 export function contrastRatio(
   fg: { r: number; g: number; b: number },
-  bg: { r: number; g: number; b: number },
+  bg: { r: number; g: number; b: number }
 ): number {
   const l1 = luminance(fg);
   const l2 = luminance(bg);
@@ -121,11 +118,11 @@ export function contrastRatio(
   return (lighter + 0.05) / (darker + 0.05);
 }
 
-function rgbToHsl(rgb: {
-  r: number;
-  g: number;
-  b: number;
-}): { h: number; s: number; l: number } {
+function rgbToHsl(rgb: { r: number; g: number; b: number }): {
+  h: number;
+  s: number;
+  l: number;
+} {
   const max = Math.max(rgb.r, rgb.g, rgb.b);
   const min = Math.min(rgb.r, rgb.g, rgb.b);
   const l = (max + min) / 2;
@@ -149,11 +146,11 @@ function rgbToHsl(rgb: {
   return { h, s, l };
 }
 
-function hslToRgb(hsl: {
-  h: number;
-  s: number;
-  l: number;
-}): { r: number; g: number; b: number } {
+function hslToRgb(hsl: { h: number; s: number; l: number }): {
+  r: number;
+  g: number;
+  b: number;
+} {
   if (hsl.s === 0) {
     return { r: hsl.l, g: hsl.l, b: hsl.l };
   }

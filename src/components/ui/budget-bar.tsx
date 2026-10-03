@@ -14,10 +14,10 @@ export function BudgetBar({
   currency: string;
 }) {
   const c = useThemeColors();
-  
+
   // Clamp negative spent to zero
   const clampedSpent = Math.max(0, spentMinor);
-  
+
   // Handle limit 0: treat as no budget set, show 0 left
   const ratio = limitMinor > 0 ? clampedSpent / limitMinor : 0;
   const percentage = Math.min(ratio * 100, 100);
@@ -28,7 +28,11 @@ export function BudgetBar({
   const state = isOver ? 'over' : isNear ? 'near' : 'ok';
   const config = {
     ok: { color: c.income, icon: 'checkmark-circle' as const, label: 'left' },
-    near: { color: c.warning, icon: 'alert-circle' as const, label: 'Close to limit' },
+    near: {
+      color: c.warning,
+      icon: 'alert-circle' as const,
+      label: 'Close to limit',
+    },
     over: { color: c.expense, icon: 'warning' as const, label: 'Over by' },
   }[state];
 
