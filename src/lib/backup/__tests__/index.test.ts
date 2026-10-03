@@ -19,7 +19,7 @@ tx2,income,50000,Salary,2024-03-01T00:00:00Z,USD`;
     expect(result.rows).toHaveLength(2);
     expect(result.skipped).toBe(0);
     expect(result.rows[0].type).toBe('expense');
-    expect(result.rows[0].amount).toBe(15);
+    expect(result.rows[0].amountMinor).toBe(1500);
     expect(result.rows[0].title).toBe('Coffee');
   });
 
@@ -31,8 +31,8 @@ income,500.00,Salary,2024-03-01,USD`;
     const result = parseTransactionsCsv(csv, 'USD');
 
     expect(result.rows).toHaveLength(2);
-    expect(result.rows[0].amount).toBe(15.5);
-    expect(result.rows[1].amount).toBe(500);
+    expect(result.rows[0].amountMinor).toBe(1550);
+    expect(result.rows[1].amountMinor).toBe(50000);
   });
 
   it('handles comma decimal separators in amount', () => {
@@ -43,8 +43,8 @@ income,"500,00",Salary,2024-03-01`;
     const result = parseTransactionsCsv(csv, 'EUR');
 
     expect(result.rows).toHaveLength(2);
-    expect(result.rows[0].amount).toBe(15.5);
-    expect(result.rows[1].amount).toBe(500);
+    expect(result.rows[0].amountMinor).toBe(1550);
+    expect(result.rows[1].amountMinor).toBe(50000);
   });
 
   it('skips rows with invalid amounts', () => {
@@ -113,8 +113,8 @@ income,-500,Refund,2024-03-15`;
 
     const result = parseTransactionsCsv(csv, 'USD');
 
-    expect(result.rows[0].amount).toBe(15.5);
-    expect(result.rows[1].amount).toBe(500);
+    expect(result.rows[0].amountMinor).toBe(1550);
+    expect(result.rows[1].amountMinor).toBe(50000);
   });
 
   it('defaults title to "Imported" when missing', () => {

@@ -58,8 +58,8 @@ export function GoalsScreen() {
     let startMinor: number | undefined;
     if (starting.trim()) {
       const parsed = parseAmountToMinor(starting.trim(), currency);
-      if (parsed === null) {
-        Alert.alert('Starting amount must be a valid number');
+      if (parsed === null || parsed < 0) {
+        Alert.alert('Starting amount must be a valid non-negative number');
         return;
       }
       startMinor = parsed;

@@ -18,6 +18,12 @@ export const CURRENCIES: Currency[] = [
   { code: 'CNY', name: 'Chinese Yuan', symbol: '¥', decimals: 2 },
 ];
 
+/**
+ * Maximum allowed value in minor units (10 trillion minor = 100 billion major for 2-decimal currencies).
+ * Reject amounts above this to prevent overflow and unrealistic values.
+ */
+export const MAX_MINOR = 1e13;
+
 export function getCurrency(code: string): Currency {
   return CURRENCIES.find((c) => c.code === code) ?? CURRENCIES[0];
 }
@@ -61,6 +67,9 @@ export function parseAmountToMinor(
   let cleaned = input.trim();
   if (!cleaned) return null;
 
+  // Normalize spaces: regular space, NBSP (U+00A0), narrow NBSP (U+202F)
+  cleaned = cleaned.replace(/[\u0020\u00A0\u202F]/g, '');
+
   const currencySymbolsAndCodes = [
     '$',
     '€',
@@ -81,16 +90,25 @@ export function parseAmountToMinor(
     'CNY',
   ];
 
+  let hadLeadingSymbol = false;
+  let hadTrailingSymbol = false;
+
   for (const symbol of currencySymbolsAndCodes) {
     if (cleaned.startsWith(symbol)) {
       cleaned = cleaned.slice(symbol.length).trim();
+      hadLeadingSymbol = true;
     }
     if (cleaned.endsWith(symbol)) {
       cleaned = cleaned.slice(0, -symbol.length).trim();
+      hadTrailingSymbol = true;
     }
   }
 
   if (!cleaned) return null;
+
+  if ((hadLeadingSymbol || hadTrailingSymbol) && /^[+-]/.test(cleaned)) {
+    return null;
+  }
 
   const hasPlus = cleaned.startsWith('+');
   const hasMinus = cleaned.startsWith('-');
@@ -99,6 +117,8 @@ export function parseAmountToMinor(
   if (hasPlus || hasMinus) {
     cleaned = cleaned.slice(1).trim();
   }
+
+  if (!cleaned) return null;
 
   const multipleSignsPattern = /[+-].*[+-]/;
   if (multipleSignsPattern.test(cleaned)) return null;
@@ -271,7 +291,7 @@ export function parseAmountToMinor(
   try {
     const bigIntValue = BigInt(minorString);
 
-    if (bigIntValue > BigInt(Number.MAX_SAFE_INTEGER)) {
+    if (bigIntValue >= BigInt(MAX_MINOR)) {
       return null;
     }
 

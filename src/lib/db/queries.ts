@@ -13,7 +13,7 @@ import {
 } from 'drizzle-orm';
 
 import { createId } from '@/lib/id';
-import { fromMinorUnits, getCurrency, toMinorUnits } from '@/lib/money';
+import { fromMinorUnits, toMinorUnits } from '@/lib/money';
 import { transactionInputSchema } from '@/lib/validation';
 
 import type { AppDatabase } from './client';
@@ -398,6 +398,7 @@ export async function createTransfer(
   input: {
     fromAccountId: string;
     toAccountId: string;
+    /** @deprecated Use amountMinor instead */
     amount?: number;
     amountMinor?: number;
     fromCurrency: string;
@@ -741,6 +742,11 @@ export async function createGoal(
     input.currentMinor !== undefined
       ? input.currentMinor
       : toMinorUnits(input.current ?? 0, input.currencyCode);
+
+  if (currentMinor < 0) {
+    throw new Error('Starting amount cannot be negative');
+  }
+
   await database.insert(goals).values({
     id,
     name: input.name.trim(),
