@@ -248,3 +248,33 @@ function hslToRgb(hsl: { h: number; s: number; l: number }): {
     b: hue2rgb(hsl.h - 1 / 3),
   };
 }
+
+/**
+ * Add or replace alpha suffix on a hex color.
+ * Expands 3-digit hex, strips existing alpha if present, then appends new alpha.
+ * @param hex - Color in #RGB, #RRGGBB, or #RRGGBBAA format
+ * @param alphaHex - 2-digit hex alpha (e.g. "22", "FF")
+ * @returns 8-digit hex color: #RRGGBBAA
+ */
+export function withAlpha(hex: string, alphaHex: string): string {
+  const clean = hex.replace(/^#/, '');
+
+  let base: string;
+  if (clean.length === 3) {
+    // Expand #RGB to #RRGGBB
+    base = clean
+      .split('')
+      .map((c) => c + c)
+      .join('');
+  } else if (clean.length === 6) {
+    base = clean;
+  } else if (clean.length === 8) {
+    // Strip existing alpha
+    base = clean.slice(0, 6);
+  } else {
+    // Invalid format, return as-is with alpha appended
+    return `#${clean}${alphaHex}`;
+  }
+
+  return `#${base.toUpperCase()}${alphaHex}`;
+}
