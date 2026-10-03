@@ -87,13 +87,13 @@ export function ActivityCalendar({
             borderRadius: 12,
           },
           content: {
-            color: colorScheme === 'dark' ? '#0A0A0A' : '#FFFFFF',
+            color: c.inkInverse,
             fontWeight: '700',
           },
         }),
       },
     }),
-    [c, colorScheme, markedAmounts, max]
+    [c, markedAmounts, max]
   );
 
   const activeRanges = selected ? [{ startId: selected, endId: selected }] : [];

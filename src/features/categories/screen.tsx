@@ -41,7 +41,7 @@ const emptyDraft = (): Draft => ({
 
 export function CategoriesScreen() {
   const { colorScheme, bumpData } = useApp();
-  const theme = useThemeColors();
+  const c = useThemeColors();
   const { showToast } = useToast();
   const [items, setItems] = useState<Category[]>([]);
   const [draft, setDraft] = useState<Draft>(emptyDraft);
@@ -73,7 +73,7 @@ export function CategoriesScreen() {
       showToast('Enter a category name', 'error');
       return;
     }
-    const color = draft.kind === 'income' ? '#1A7A4C' : '#C43C2C';
+    const color = draft.kind === 'income' ? c.income : c.expense;
     try {
       if (editingId) {
         await updateCategory(db, editingId, {
@@ -167,7 +167,7 @@ export function CategoriesScreen() {
               >
                 <CategoryGlyph
                   iconKey={icon.key}
-                  color={draft.iconKey === icon.key ? '#1A7A4C' : '#6B7280'}
+                  color={draft.iconKey === icon.key ? c.accent : c.inkMuted}
                 />
               </Pressable>
             ))}
@@ -194,32 +194,32 @@ export function CategoriesScreen() {
         <AppText size='sm' muted className='mt-6 mb-1'>
           Your categories
         </AppText>
-        {items.map((c) => (
+        {items.map((cat) => (
           <View
-            key={c.id}
+            key={cat.id}
             className='flex-row items-center gap-3 py-3'
             style={{
               borderBottomWidth: 1,
-              borderBottomColor: colorScheme === 'dark' ? '#2A3A33' : '#D5DED8',
+              borderBottomColor: c.line,
             }}
           >
-            <CategoryGlyph iconKey={c.iconKey} color={c.color} />
+            <CategoryGlyph iconKey={cat.iconKey} color={cat.color} />
             <View className='flex-1'>
-              <AppText weight='medium'>{c.name}</AppText>
+              <AppText weight='medium'>{cat.name}</AppText>
               <AppText size='sm' muted>
-                {c.kind}
-                {c.isDefault ? ' · default' : ''}
+                {cat.kind}
+                {cat.isDefault ? ' · default' : ''}
               </AppText>
             </View>
             <IconButton
               name='create-outline'
-              color={theme.accent}
-              onPress={() => startEdit(c)}
+              color={c.accent}
+              onPress={() => startEdit(cat)}
             />
             <IconButton
               name='trash-outline'
-              color={theme.expense}
-              onPress={() => setPendingDelete(c)}
+              color={c.expense}
+              onPress={() => setPendingDelete(cat)}
             />
           </View>
         ))}

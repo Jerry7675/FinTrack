@@ -19,8 +19,12 @@ const tailwindJs = fs.readFileSync(
 
 const hexPattern = /#[0-9A-Fa-f]{6}/g;
 
-const paletteColors = [...paletteTs.matchAll(hexPattern)].map(m => m[0].toUpperCase());
-const tailwindColors = [...tailwindJs.matchAll(hexPattern)].map(m => m[0].toUpperCase());
+const paletteColors = [...paletteTs.matchAll(hexPattern)].map((m) =>
+  m[0].toUpperCase()
+);
+const tailwindColors = [...tailwindJs.matchAll(hexPattern)].map((m) =>
+  m[0].toUpperCase()
+);
 
 const paletteSet = new Set(paletteColors);
 const tailwindSet = new Set(tailwindColors);
@@ -30,14 +34,18 @@ const errors = [];
 
 for (const color of paletteSet) {
   if (!tailwindSet.has(color)) {
-    errors.push(`Color ${color} is in palette.ts but not in tailwind.config.js`);
+    errors.push(
+      `Color ${color} is in palette.ts but not in tailwind.config.js`
+    );
     passed = false;
   }
 }
 
 for (const color of tailwindSet) {
   if (!paletteSet.has(color)) {
-    errors.push(`Color ${color} is in tailwind.config.js but not in palette.ts`);
+    errors.push(
+      `Color ${color} is in tailwind.config.js but not in palette.ts`
+    );
     passed = false;
   }
 }

@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import {
   createContext,
   useCallback,
@@ -6,7 +7,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import { Animated, Pressable, Text } from 'react-native';
+import { Animated, Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { colors } from '@/constants/palette';
@@ -59,22 +60,16 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 
   const value = useMemo(() => ({ showToast }), [showToast]);
 
-  const bg =
+  const config =
     toast?.tone === 'error'
-      ? c.expense
+      ? { bg: c.expense, fg: c.inkInverse, icon: 'alert-circle' as const }
       : toast?.tone === 'success'
-        ? c.accent
-        : colorScheme === 'dark'
-          ? '#FAFAFA'
-          : '#0A0A0A';
-  const fg =
-    toast?.tone === 'success' && colorScheme === 'dark'
-      ? '#0A0A0A'
-      : toast?.tone === 'error'
-        ? '#FFFFFF'
-        : colorScheme === 'dark'
-          ? '#0A0A0A'
-          : '#FFFFFF';
+        ? { bg: c.income, fg: c.inkInverse, icon: 'checkmark-circle' as const }
+        : {
+            bg: c.surfaceOverlay,
+            fg: c.ink,
+            icon: 'information-circle' as const,
+          };
 
   return (
     <ToastContext.Provider value={value}>
@@ -95,7 +90,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
           <Pressable
             onPress={hide}
             style={{
-              backgroundColor: bg,
+              backgroundColor: config.bg,
               borderRadius: scale(16),
               paddingHorizontal: scale(16),
               paddingVertical: vs(14),
@@ -105,16 +100,25 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
               shadowOffset: { width: 0, height: 6 },
             }}
           >
-            <Text
+            <View
               style={{
-                color: fg,
-                fontSize: fontSize(14),
-                fontWeight: '600',
-                textAlign: 'center',
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 8,
+                justifyContent: 'center',
               }}
             >
-              {toast.message}
-            </Text>
+              <Ionicons name={config.icon} size={scale(18)} color={config.fg} />
+              <Text
+                style={{
+                  color: config.fg,
+                  fontSize: fontSize(14),
+                  fontWeight: '600',
+                }}
+              >
+                {toast.message}
+              </Text>
+            </View>
           </Pressable>
         </Animated.View>
       ) : null}

@@ -1,8 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { View } from 'react-native';
-import { AppText, useThemeColors } from './primitives';
-import { formatMoney } from '@/lib/money';
 import { scale } from '@/lib/layout';
+import { formatMoney } from '@/lib/money';
+import { AppText, useThemeColors } from './primitives';
 
 export function BudgetBar({
   spentMinor,
@@ -16,7 +16,7 @@ export function BudgetBar({
   const c = useThemeColors();
   const ratio = limitMinor > 0 ? spentMinor / limitMinor : 0;
   const percentage = Math.min(ratio * 100, 100);
-  
+
   const isOver = ratio >= 1;
   const isNear = ratio >= 0.8 && ratio < 1;
 
@@ -33,19 +33,21 @@ export function BudgetBar({
     : formatMoney(remaining, currency);
 
   return (
-    <View className="gap-2">
-      <View className="flex-row items-center gap-2">
+    <View className='gap-2'>
+      <View className='flex-row items-center gap-2'>
         <Ionicons name={config.icon} size={scale(16)} color={config.color} />
-        <AppText size="sm" weight="medium" style={{ color: config.color }}>
-          {isOver ? `${config.text} ${displayAmount}` : `${displayAmount} ${config.text}`}
+        <AppText size='sm' weight='medium' style={{ color: config.color }}>
+          {isOver
+            ? `${config.text} ${displayAmount}`
+            : `${displayAmount} ${config.text}`}
         </AppText>
       </View>
       <View
-        className="h-2 w-full overflow-hidden rounded-full"
+        className='h-2 w-full overflow-hidden rounded-full'
         style={{ backgroundColor: c.surfaceHigh }}
       >
         <View
-          className="h-full rounded-full"
+          className='h-full rounded-full'
           style={{
             width: `${percentage}%`,
             backgroundColor: config.color,

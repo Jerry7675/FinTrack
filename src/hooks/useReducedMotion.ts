@@ -1,5 +1,5 @@
-import { AccessibilityInfo } from 'react-native';
 import { useEffect, useState } from 'react';
+import { AccessibilityInfo } from 'react-native';
 
 /**
  * Returns true when the user has enabled Reduce Motion in system accessibility settings.
@@ -17,7 +17,7 @@ export function useReducedMotion(): boolean {
 
     const subscription = AccessibilityInfo.addEventListener(
       'reduceMotionChanged',
-      setReduceMotion,
+      setReduceMotion
     );
 
     return () => subscription?.remove();
