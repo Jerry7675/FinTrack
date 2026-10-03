@@ -13,7 +13,7 @@ import {
 } from 'drizzle-orm';
 
 import { createId } from '@/lib/id';
-import { toMinorUnits } from '@/lib/money';
+import { fromMinorUnits, getCurrency, toMinorUnits } from '@/lib/money';
 import { transactionInputSchema } from '@/lib/validation';
 
 import type { AppDatabase } from './client';
@@ -313,17 +313,19 @@ export async function createTransaction(
     accountId: input.accountId,
     categoryId: input.categoryId ?? null,
     type: input.type,
-    amount: input.amount ?? 0,
+    amountMinor:
+      input.amountMinor ??
+      (input.amount
+        ? Math.abs(toMinorUnits(input.amount, input.currencyCode))
+        : undefined),
+    amount: input.amount,
     currencyCode: input.currencyCode,
     title: input.title,
     note: input.note,
     tagNames: input.tagNames,
   });
   const id = createId();
-  const amountMinor =
-    input.amountMinor !== undefined
-      ? Math.abs(input.amountMinor)
-      : Math.abs(toMinorUnits(parsed.amount, parsed.currencyCode));
+  const amountMinor = Math.abs(parsed.amountMinor);
   await database.insert(transactions).values({
     id,
     accountId: parsed.accountId,
@@ -396,7 +398,8 @@ export async function createTransfer(
   input: {
     fromAccountId: string;
     toAccountId: string;
-    amount: number;
+    amount?: number;
+    amountMinor?: number;
     fromCurrency: string;
     toCurrency: string;
     title?: string;
@@ -409,8 +412,20 @@ export async function createTransfer(
   const toId = createId();
   const occurredAt = input.occurredAt ?? new Date();
   const title = input.title?.trim() || 'Transfer';
-  const fromMinor = Math.abs(toMinorUnits(input.amount, input.fromCurrency));
-  const toMinor = Math.abs(toMinorUnits(input.amount, input.toCurrency));
+  const fromMinor =
+    input.amountMinor !== undefined
+      ? Math.abs(input.amountMinor)
+      : Math.abs(toMinorUnits(input.amount ?? 0, input.fromCurrency));
+
+  const toMinor =
+    input.fromCurrency === input.toCurrency
+      ? fromMinor
+      : Math.abs(
+          toMinorUnits(
+            fromMinorUnits(fromMinor, input.fromCurrency),
+            input.toCurrency
+          )
+        );
 
   await database.insert(transactions).values([
     {
