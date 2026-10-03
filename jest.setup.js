@@ -5,11 +5,46 @@ jest.mock('expo-sqlite', () => ({
 
 // Mock expo-crypto for test environment
 jest.mock('expo-crypto', () => {
+  const nodeCrypto = require('node:crypto');
   let saltCounter = 0;
+  let uuidCounter = 0;
+  const mockAuthTagLen = 16;
+
+  function mockDigestHex(data) {
+    return nodeCrypto.createHash('sha256').update(data, 'utf8').digest('hex');
+  }
+
+  function mockHexToKeyBytes(keyHex) {
+    const hex = keyHex.padEnd(64, '0').slice(0, 64);
+    const out = new Uint8Array(32);
+    for (let i = 0; i < 32; i++) {
+      out[i] = Number.parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+    }
+    return out;
+  }
+
+  function mockXorWithKeyBytes(data, keyBytes) {
+    const out = new Uint8Array(data.length);
+    for (let i = 0; i < data.length; i++) {
+      out[i] = data[i] ^ keyBytes[i % keyBytes.length];
+    }
+    return out;
+  }
+
+  function mockAuthTag(keyHex, ciphertextBody) {
+    return nodeCrypto
+      .createHash('sha256')
+      .update(keyHex, 'utf8')
+      .update(ciphertextBody)
+      .digest()
+      .subarray(0, mockAuthTagLen);
+  }
 
   return {
     randomUUID: jest.fn(() => {
-      return `${Date.now()}-${Math.random().toString(36).substring(7)}`;
+      uuidCounter += 1;
+      const suffix = uuidCounter.toString(16).padStart(12, '0');
+      return `00000000-0000-4000-8000-${suffix}`;
     }),
     AESEncryptionKey: {
       import: jest.fn((keyHex) =>
@@ -24,40 +59,39 @@ jest.mock('expo-crypto', () => {
       })),
     },
     aesEncryptAsync: jest.fn((plaintext, key) => {
-      // Simple reversible "encryption" for testing - just XOR with key
-      const encrypted = new Uint8Array(plaintext.length);
-      const keyBytes = new TextEncoder().encode(key.hex.slice(0, 32));
-      for (let i = 0; i < plaintext.length; i++) {
-        encrypted[i] = plaintext[i] ^ keyBytes[i % keyBytes.length];
-      }
+      const keyBytes = mockHexToKeyBytes(key.hex);
+      const body = mockXorWithKeyBytes(plaintext, keyBytes);
+      const tag = mockAuthTag(key.hex, body);
+      const combined = new Uint8Array(body.length + mockAuthTagLen);
+      combined.set(body);
+      combined.set(tag, body.length);
       return Promise.resolve({
-        combined: () => Promise.resolve(encrypted),
+        combined: () => Promise.resolve(combined),
       });
     }),
     aesDecryptAsync: jest.fn((sealed, key) => {
-      // Reverse the XOR
       const combined = sealed.combined;
-      const decrypted = new Uint8Array(combined.length);
-      const keyBytes = new TextEncoder().encode(key.hex.slice(0, 32));
-      for (let i = 0; i < combined.length; i++) {
-        decrypted[i] = combined[i] ^ keyBytes[i % keyBytes.length];
+      if (combined.length < mockAuthTagLen) {
+        return Promise.reject(new Error('Invalid ciphertext'));
       }
-      return Promise.resolve(decrypted);
+      const body = combined.subarray(0, combined.length - mockAuthTagLen);
+      const tag = combined.subarray(combined.length - mockAuthTagLen);
+      const expected = mockAuthTag(key.hex, body);
+      for (let i = 0; i < mockAuthTagLen; i++) {
+        if (tag[i] !== expected[i]) {
+          return Promise.reject(new Error('Authentication failed'));
+        }
+      }
+      const keyBytes = mockHexToKeyBytes(key.hex);
+      return Promise.resolve(mockXorWithKeyBytes(body, keyBytes));
     }),
     CryptoDigestAlgorithm: {
       SHA256: 'SHA256',
     },
-    digestStringAsync: jest.fn((algorithm, data) => {
-      // Simple deterministic hash for testing
-      let hash = 0;
-      for (let i = 0; i < data.length; i++) {
-        hash = (hash << 5) - hash + data.charCodeAt(i);
-        hash = hash & hash;
-      }
-      return Promise.resolve(Math.abs(hash).toString(16).padStart(64, '0'));
-    }),
+    digestStringAsync: jest.fn((...args) =>
+      Promise.resolve(mockDigestHex(args[1]))
+    ),
     getRandomBytesAsync: jest.fn((count) => {
-      // Return different salts each time
       const bytes = new Uint8Array(count);
       for (let i = 0; i < count; i++) {
         bytes[i] = (saltCounter + i) % 256;
