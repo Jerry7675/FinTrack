@@ -67,9 +67,6 @@ export function parseAmountToMinor(
   let cleaned = input.trim();
   if (!cleaned) return null;
 
-  // Normalize spaces: regular space, NBSP (U+00A0), narrow NBSP (U+202F)
-  cleaned = cleaned.replace(/[\u0020\u00A0\u202F]/g, '');
-
   const currencySymbolsAndCodes = [
     '$',
     '€',
@@ -90,26 +87,7 @@ export function parseAmountToMinor(
     'CNY',
   ];
 
-  let hadLeadingSymbol = false;
-  let hadTrailingSymbol = false;
-
-  for (const symbol of currencySymbolsAndCodes) {
-    if (cleaned.startsWith(symbol)) {
-      cleaned = cleaned.slice(symbol.length).trim();
-      hadLeadingSymbol = true;
-    }
-    if (cleaned.endsWith(symbol)) {
-      cleaned = cleaned.slice(0, -symbol.length).trim();
-      hadTrailingSymbol = true;
-    }
-  }
-
-  if (!cleaned) return null;
-
-  if ((hadLeadingSymbol || hadTrailingSymbol) && /^[+-]/.test(cleaned)) {
-    return null;
-  }
-
+  // Strip sign first (before symbols)
   const hasPlus = cleaned.startsWith('+');
   const hasMinus = cleaned.startsWith('-');
   const isNegative = hasMinus;
@@ -120,11 +98,32 @@ export function parseAmountToMinor(
 
   if (!cleaned) return null;
 
+  // Then strip currency symbols/codes
+  for (const symbol of currencySymbolsAndCodes) {
+    if (cleaned.startsWith(symbol)) {
+      cleaned = cleaned.slice(symbol.length).trim();
+    }
+    if (cleaned.endsWith(symbol)) {
+      cleaned = cleaned.slice(0, -symbol.length).trim();
+    }
+  }
+
+  if (!cleaned) return null;
+
+  // Reject if there's still a sign after removing symbols (e.g., "$-5")
+  if (/^[+-]/.test(cleaned)) {
+    return null;
+  }
+
   const multipleSignsPattern = /[+-].*[+-]/;
   if (multipleSignsPattern.test(cleaned)) return null;
 
+  // Normalize space types to regular space for thousands separator validation
+  cleaned = cleaned.replace(/[\u00A0\u202F]/g, ' ');
+
   const hasComma = cleaned.includes(',');
   const hasPeriod = cleaned.includes('.');
+  const hasSpace = cleaned.includes(' ');
 
   let integerPart = '';
   let fractionalPart = '';
@@ -149,6 +148,10 @@ export function parseAmountToMinor(
       if (parts[i].length !== 3) return false;
     }
     return true;
+  }
+
+  if (hasComma && hasPeriod && hasSpace) {
+    return null;
   }
 
   if (hasComma && hasPeriod) {
@@ -179,6 +182,36 @@ export function parseAmountToMinor(
 
       integerPart = integerCleaned;
       fractionalPart = afterDecimal;
+    }
+  } else if (hasComma && hasSpace) {
+    // Space as thousands separator, comma as decimal
+    const lastComma = cleaned.lastIndexOf(',');
+    const beforeComma = cleaned.substring(0, lastComma);
+    const afterComma = cleaned.substring(lastComma + 1);
+
+    if (afterComma.length <= decimals && /^\d+$/.test(afterComma)) {
+      if (!isValidThousandsSeparators(beforeComma, ' ')) return null;
+      const intParts = beforeComma.split(' ');
+      if (intParts.some((part) => !/^\d+$/.test(part))) return null;
+      integerPart = intParts.join('');
+      fractionalPart = afterComma;
+    } else {
+      return null;
+    }
+  } else if (hasPeriod && hasSpace) {
+    // Space as thousands separator, period as decimal
+    const lastPeriod = cleaned.lastIndexOf('.');
+    const beforePeriod = cleaned.substring(0, lastPeriod);
+    const afterPeriod = cleaned.substring(lastPeriod + 1);
+
+    if (afterPeriod.length <= decimals && /^\d+$/.test(afterPeriod)) {
+      if (!isValidThousandsSeparators(beforePeriod, ' ')) return null;
+      const intParts = beforePeriod.split(' ');
+      if (intParts.some((part) => !/^\d+$/.test(part))) return null;
+      integerPart = intParts.join('');
+      fractionalPart = afterPeriod;
+    } else {
+      return null;
     }
   } else if (hasComma) {
     const parts = cleaned.split(',');
@@ -263,6 +296,14 @@ export function parseAmountToMinor(
     } else {
       return null;
     }
+  } else if (hasSpace) {
+    const parts = cleaned.split(' ');
+    if (parts.some((part) => part === '')) return null;
+    if (!isValidThousandsSeparators(cleaned, ' ')) return null;
+    const joined = parts.join('');
+    if (!/^\d+$/.test(joined)) return null;
+    integerPart = joined;
+    fractionalPart = '';
   } else {
     if (!/^\d+$/.test(cleaned)) return null;
     integerPart = cleaned;

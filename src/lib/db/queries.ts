@@ -771,9 +771,11 @@ export async function softDeleteGoal(database: AppDatabase, id: string) {
 export async function addGoalContribution(
   database: AppDatabase,
   id: string,
-  amount?: number,
-  amountMinor?: number,
-  currencyCode?: string
+  options: {
+    amountMinor?: number;
+    amount?: number;
+    currencyCode?: string;
+  }
 ) {
   const [row] = await database
     .select()
@@ -782,9 +784,12 @@ export async function addGoalContribution(
     .limit(1);
   if (!row) return;
   const delta =
-    amountMinor !== undefined && amountMinor > 0
-      ? amountMinor
-      : toMinorUnits(amount ?? 0, currencyCode ?? row.currencyCode);
+    options.amountMinor !== undefined && options.amountMinor > 0
+      ? options.amountMinor
+      : toMinorUnits(
+          options.amount ?? 0,
+          options.currencyCode ?? row.currencyCode
+        );
   if (delta <= 0) return;
   await database
     .update(goals)
@@ -1062,9 +1067,11 @@ export async function softDeleteCategory(database: AppDatabase, id: string) {
 export async function recordDebtPayment(
   database: AppDatabase,
   id: string,
-  amount?: number,
-  amountMinor?: number,
-  currencyCode?: string
+  options: {
+    amountMinor?: number;
+    amount?: number;
+    currencyCode?: string;
+  }
 ) {
   const [row] = await database
     .select()
@@ -1073,9 +1080,12 @@ export async function recordDebtPayment(
     .limit(1);
   if (!row) return;
   const delta =
-    amountMinor !== undefined && amountMinor > 0
-      ? amountMinor
-      : toMinorUnits(amount ?? 0, currencyCode ?? row.currencyCode);
+    options.amountMinor !== undefined && options.amountMinor > 0
+      ? options.amountMinor
+      : toMinorUnits(
+          options.amount ?? 0,
+          options.currencyCode ?? row.currencyCode
+        );
   if (delta <= 0) return;
   await database
     .update(debts)

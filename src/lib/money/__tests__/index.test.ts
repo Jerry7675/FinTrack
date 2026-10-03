@@ -216,6 +216,7 @@ describe('parseAmountToMinor - malformed thousands separators', () => {
   it('normalizes regular spaces between digit groups', () => {
     expect(parseAmountToMinor('1 234,56', 'EUR')).toBe(123456);
     expect(parseAmountToMinor('1 234.56', 'USD')).toBe(123456);
+    expect(parseAmountToMinor('1 234 567.89', 'USD')).toBe(123456789);
   });
 
   it('normalizes NBSP (U+00A0) between digit groups', () => {
@@ -228,6 +229,20 @@ describe('parseAmountToMinor - malformed thousands separators', () => {
     expect(parseAmountToMinor('1\u202F234.56', 'USD')).toBe(123456);
   });
 
+  it('rejects invalid space groupings', () => {
+    expect(parseAmountToMinor('12 34', 'USD')).toBeNull();
+    expect(parseAmountToMinor('1 23', 'USD')).toBeNull();
+    expect(parseAmountToMinor('1 2345', 'USD')).toBeNull();
+    expect(parseAmountToMinor('1  234', 'USD')).toBeNull();
+    expect(parseAmountToMinor('1 234 56', 'USD')).toBeNull();
+  });
+
+  it('rejects mixing space with comma or period', () => {
+    expect(parseAmountToMinor('1 234,56.78', 'USD')).toBeNull();
+    expect(parseAmountToMinor('1 234.56,78', 'EUR')).toBeNull();
+    expect(parseAmountToMinor('1,234 567', 'USD')).toBeNull();
+  });
+
   it('enforces MAX_MINOR limit', () => {
     expect(parseAmountToMinor('100000000000.00', 'USD')).toBeNull();
     expect(parseAmountToMinor('99999999999.99', 'USD')).toBe(9999999999999);
@@ -237,6 +252,17 @@ describe('parseAmountToMinor - malformed thousands separators', () => {
     expect(parseAmountToMinor('$-5', 'USD')).toBeNull();
     expect(parseAmountToMinor('€-5', 'EUR')).toBeNull();
     expect(parseAmountToMinor('£-10.50', 'GBP')).toBeNull();
+  });
+
+  it('accepts sign before symbol', () => {
+    expect(parseAmountToMinor('-$5', 'USD')).toBe(-500);
+    expect(parseAmountToMinor('- $5', 'USD')).toBe(-500);
+    expect(parseAmountToMinor('-€10.50', 'EUR')).toBe(-1050);
+    expect(parseAmountToMinor('-5 USD', 'USD')).toBe(-500);
+    expect(parseAmountToMinor('-USD 5', 'USD')).toBe(-500);
+    expect(parseAmountToMinor('+$5', 'USD')).toBe(500);
+    expect(parseAmountToMinor('+ $5', 'USD')).toBe(500);
+    expect(parseAmountToMinor('+5 USD', 'USD')).toBe(500);
   });
 });
 

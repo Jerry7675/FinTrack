@@ -97,13 +97,10 @@ export function GoalsScreen() {
       Alert.alert('Enter a positive contribution amount');
       return;
     }
-    await addGoalContribution(
-      db,
-      contributeId,
-      undefined,
+    await addGoalContribution(db, contributeId, {
       amountMinor,
-      currency
-    );
+      currencyCode: currency,
+    });
     setContributeId(null);
     setContributeAmount('');
     bumpData();

@@ -28,7 +28,7 @@ import {
   transactions,
   transactionTags,
 } from '@/lib/db/schema';
-import { parseAmountToMinor } from '@/lib/money';
+import { MAX_MINOR, parseAmountToMinor } from '@/lib/money';
 
 export const BACKUP_SCHEMA_VERSION = 1;
 export const ENC_PREFIX = 'FTENC2';
@@ -378,7 +378,11 @@ export function parseTransactionsCsv(
         continue;
       }
       const parsedMinor = Number.parseInt(rawAmount, 10);
-      if (!Number.isFinite(parsedMinor) || !Number.isSafeInteger(parsedMinor)) {
+      if (
+        !Number.isFinite(parsedMinor) ||
+        !Number.isSafeInteger(parsedMinor) ||
+        Math.abs(parsedMinor) >= MAX_MINOR
+      ) {
         skipped += 1;
         continue;
       }
