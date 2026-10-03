@@ -17,7 +17,7 @@ export function BudgetBar({
   const c = useThemeColors();
   const { state, percentage, remaining, label } = calculateBudgetState(
     spentMinor,
-    limitMinor,
+    limitMinor
   );
 
   const config = {

@@ -2,7 +2,7 @@
  * Test that palette.ts and tailwind.config.js stay in sync.
  */
 const fs = require('fs');
-const path = require('path');
+const path = require('node:path');
 
 describe('palette sync', () => {
   it('palette.ts and tailwind.config.js have matching colors and token names', () => {
