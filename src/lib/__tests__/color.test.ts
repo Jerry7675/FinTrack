@@ -295,19 +295,21 @@ describe('default category colors are unique', () => {
     require('@/lib/categories/icons').DEFAULT_CATEGORIES;
 
   it('all category colors are unique', () => {
-    const colors = DEFAULT_CATEGORIES.map((c) => c.color.toUpperCase());
+    const colors = DEFAULT_CATEGORIES.map(
+      (c: { color: string }) => c.color.toUpperCase(),
+    );
     const uniqueColors = new Set(colors);
 
     // Find duplicates
     const duplicates: { color: string; categories: string[] }[] = [];
     for (const color of uniqueColors) {
       const cats = DEFAULT_CATEGORIES.filter(
-        (c) => c.color.toUpperCase() === color
+        (c: { color: string }) => c.color.toUpperCase() === color,
       );
       if (cats.length > 1) {
         duplicates.push({
           color,
-          categories: cats.map((c) => c.name),
+          categories: cats.map((c: { name: string }) => c.name),
         });
       }
     }
