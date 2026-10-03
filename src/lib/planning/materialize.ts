@@ -150,6 +150,7 @@ async function collectBudgetAlerts(
         categoryId: budget.categoryId,
         accountId: budget.accountId,
         period: budget.period,
+        currencyCode: budget.currencyCode,
       });
       const status = budgetStatus(spent, budget.amountMinor);
       if (status === 'healthy') continue;
