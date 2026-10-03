@@ -72,7 +72,7 @@ export function DebtsScreen() {
       Alert.alert('Enter a valid payment amount');
       return;
     }
-    await recordDebtPayment(db, payId, undefined, amountMinor);
+    await recordDebtPayment(db, payId, { amountMinor });
     setPayId(null);
     setPayAmount('');
     bumpData();

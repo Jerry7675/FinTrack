@@ -1,10 +1,15 @@
 import { z } from 'zod';
+import { MAX_MINOR } from './money';
 
 export const transactionInputSchema = z.object({
   accountId: z.string().min(1),
   categoryId: z.string().nullable().optional(),
   type: z.enum(['expense', 'income']),
-  amountMinor: z.number().int().positive(),
+  amountMinor: z
+    .number()
+    .int()
+    .positive()
+    .max(MAX_MINOR - 1),
   amount: z.number().positive().optional(),
   currencyCode: z.string().length(3),
   title: z.string().min(1).max(120),

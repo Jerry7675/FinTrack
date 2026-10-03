@@ -126,6 +126,18 @@ expense,15.50,2024-03-15`;
     expect(result.rows[0].title).toBe('Imported');
   });
 
+  it('skips amount_minor over MAX_MINOR in CSV', () => {
+    const csv = `type,amount_minor,title,date
+expense,10000000000000,Huge,2024-03-15
+expense,1500,Small,2024-03-15`;
+
+    const result = parseTransactionsCsv(csv, 'USD');
+
+    expect(result.rows).toHaveLength(1);
+    expect(result.rows[0].title).toBe('Small');
+    expect(result.skipped).toBe(1);
+  });
+
   it('uses current date when date is missing', () => {
     const csv = `type,amount,title
 expense,15.50,Coffee`;

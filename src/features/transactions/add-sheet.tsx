@@ -148,7 +148,9 @@ export function AddTransactionSheet({ visible, onClose, onSaved }: Props) {
         await createTransfer(db, {
           fromAccountId: account.id,
           toAccountId: to.id,
-          amount: fromMinorUnits(amountMinor, currency),
+          ...(account.currencyCode === to.currencyCode
+            ? { amountMinor }
+            : { amount: fromMinorUnits(amountMinor, currency) }),
           fromCurrency: account.currencyCode,
           toCurrency: to.currencyCode,
           title: values.title.trim() || 'Transfer',
