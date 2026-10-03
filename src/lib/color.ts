@@ -5,26 +5,29 @@
  * Strategy: Lighten when background is dark, darken when background is light.
  * Returns the closest passing lightness value, preserving hue and saturation.
  * Falls back to black/white only if no adjustment passes.
+ * Re-checks contrast after rounding to hex to ensure the final color meets the minimum.
  */
 export function ensureContrast(
   hex: string,
   bgHex: string,
   minRatio = 3
 ): string {
-  const fg = hexToRgb(hex);
-  const bg = hexToRgb(bgHex);
+  // Parse input colors, expanding 3-digit and handling 8-digit with alpha
+  const { rgb: fg, alpha: fgAlpha } = parseHex(hex);
+  const { rgb: bg } = parseHex(bgHex);
 
   if (!fg || !bg) return hex;
 
   const currentRatio = contrastRatio(fg, bg);
-  if (currentRatio >= minRatio) return hex;
+  if (currentRatio >= minRatio) {
+    // Return normalized 6-digit hex even if input already passes
+    return rgbToHex(fg, fgAlpha);
+  }
 
   const hsl = rgbToHsl(fg);
   const bgLuminance = luminance(bg);
 
   // Determine direction based on background luminance
-  // Light background (>0.5): darken the foreground
-  // Dark background (<=0.5): lighten the foreground
   const shouldLighten = bgLuminance <= 0.5;
 
   let bestL: number | null = null;
@@ -36,7 +39,14 @@ export function ensureContrast(
   for (let i = 0; i < 50; i++) {
     const testL = (low + high) / 2;
     const testRgb = hslToRgb({ ...hsl, l: testL });
-    const ratio = contrastRatio(testRgb, bg);
+
+    // Round to hex and back to get the actual color after rounding
+    const hexTest = rgbToHex(testRgb);
+    const roundedRgb = hexToRgb(hexTest);
+
+    if (!roundedRgb) break;
+
+    const ratio = contrastRatio(roundedRgb, bg);
 
     if (ratio >= minRatio - 0.001) {
       // This lightness passes (with tiny tolerance for floating point precision)
@@ -62,7 +72,7 @@ export function ensureContrast(
   // If we found a passing lightness, use it
   if (bestL !== null) {
     const adjusted = hslToRgb({ ...hsl, l: bestL });
-    return rgbToHex(adjusted);
+    return rgbToHex(adjusted, fgAlpha);
   }
 
   // If no adjustment passes, fall back to black or white
@@ -71,15 +81,51 @@ export function ensureContrast(
 
   if (whiteRatio >= minRatio && blackRatio >= minRatio) {
     // Both pass, choose closer to original lightness
-    return hsl.l > 0.5 ? '#FFFFFF' : '#000000';
+    return hsl.l > 0.5
+      ? rgbToHex({ r: 1, g: 1, b: 1 }, fgAlpha)
+      : rgbToHex({ r: 0, g: 0, b: 0 }, fgAlpha);
   } else if (whiteRatio >= minRatio) {
-    return '#FFFFFF';
+    return rgbToHex({ r: 1, g: 1, b: 1 }, fgAlpha);
   } else if (blackRatio >= minRatio) {
-    return '#000000';
+    return rgbToHex({ r: 0, g: 0, b: 0 }, fgAlpha);
   }
 
   // Neither passes (shouldn't happen with valid backgrounds), return original
   return hex;
+}
+
+interface ParsedColor {
+  rgb: { r: number; g: number; b: number } | null;
+  alpha?: string;
+}
+
+function parseHex(hex: string): ParsedColor {
+  const clean = hex.replace(/^#/, '');
+
+  // 3-digit hex: #RGB -> #RRGGBB
+  if (clean.length === 3) {
+    const r = Number.parseInt(clean[0] + clean[0], 16) / 255;
+    const g = Number.parseInt(clean[1] + clean[1], 16) / 255;
+    const b = Number.parseInt(clean[2] + clean[2], 16) / 255;
+    return { rgb: { r, g, b } };
+  }
+
+  // 6-digit hex: #RRGGBB
+  if (clean.length === 6) {
+    const rgb = hexToRgb(`#${clean}`);
+    return { rgb };
+  }
+
+  // 8-digit hex: #RRGGBBAA -> preserve alpha
+  if (clean.length === 8) {
+    const r = Number.parseInt(clean.slice(0, 2), 16) / 255;
+    const g = Number.parseInt(clean.slice(2, 4), 16) / 255;
+    const b = Number.parseInt(clean.slice(4, 6), 16) / 255;
+    const alpha = clean.slice(6, 8);
+    return { rgb: { r, g, b }, alpha };
+  }
+
+  return { rgb: null };
 }
 
 function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
@@ -93,11 +139,15 @@ function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
     : null;
 }
 
-function rgbToHex(rgb: { r: number; g: number; b: number }): string {
+function rgbToHex(
+  rgb: { r: number; g: number; b: number },
+  alpha?: string
+): string {
   const r = Math.round(Math.max(0, Math.min(255, rgb.r * 255)));
   const g = Math.round(Math.max(0, Math.min(255, rgb.g * 255)));
   const b = Math.round(Math.max(0, Math.min(255, rgb.b * 255)));
-  return `#${((1 << 24) | (r << 16) | (g << 8) | b).toString(16).slice(1)}`;
+  const hex = `#${((1 << 24) | (r << 16) | (g << 8) | b).toString(16).slice(1)}`;
+  return alpha ? `${hex}${alpha}` : hex;
 }
 
 export function luminance(rgb: { r: number; g: number; b: number }): number {
