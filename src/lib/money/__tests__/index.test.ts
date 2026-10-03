@@ -1,9 +1,9 @@
 import {
   formatMinorToDecimal,
-  parseAmountToMinor,
-  getCurrency,
-  toMinorUnits,
   fromMinorUnits,
+  getCurrency,
+  parseAmountToMinor,
+  toMinorUnits,
 } from '../index';
 
 describe('parseAmountToMinor', () => {
@@ -284,6 +284,8 @@ describe('round-trip conversion with new parser', () => {
     const input = '999999999.99';
     const minor = parseAmountToMinor(input, 'USD');
     expect(minor).not.toBeNull();
-    expect(toMinorUnits(fromMinorUnits(minor as number, 'USD'), 'USD')).toBe(minor);
+    expect(toMinorUnits(fromMinorUnits(minor as number, 'USD'), 'USD')).toBe(
+      minor
+    );
   });
 });
