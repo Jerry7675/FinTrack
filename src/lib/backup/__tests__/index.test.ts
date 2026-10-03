@@ -138,6 +138,20 @@ expense,1500,Small,2024-03-15`;
     expect(result.skipped).toBe(1);
   });
 
+  it('skips malformed negative amounts like --5', () => {
+    const csv = `type,amount,title,date
+expense,--5,Bad,2024-03-15
+expense,-5,Good,2024-03-15
+expense,5,Also Good,2024-03-15`;
+
+    const result = parseTransactionsCsv(csv, 'USD');
+
+    expect(result.rows).toHaveLength(2);
+    expect(result.rows[0].title).toBe('Good');
+    expect(result.rows[1].title).toBe('Also Good');
+    expect(result.skipped).toBe(1);
+  });
+
   it('uses current date when date is missing', () => {
     const csv = `type,amount,title
 expense,15.50,Coffee`;

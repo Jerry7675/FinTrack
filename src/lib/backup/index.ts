@@ -389,8 +389,15 @@ export function parseTransactionsCsv(
       amountMinor = Math.abs(parsedMinor);
     } else {
       const amountStr = cols[amountIdx] ?? '';
-      const isNegative = amountStr.trim().startsWith('-');
-      const cleanedAmount = isNegative ? amountStr.trim().slice(1) : amountStr;
+      const trimmed = amountStr.trim();
+
+      if (trimmed.startsWith('--') || /^-[^0-9]/.test(trimmed)) {
+        skipped += 1;
+        continue;
+      }
+
+      const isNegative = trimmed.startsWith('-');
+      const cleanedAmount = isNegative ? trimmed.slice(1) : trimmed;
       const parsedMinor = parseAmountToMinor(cleanedAmount, currencyCode);
       if (parsedMinor === null) {
         skipped += 1;

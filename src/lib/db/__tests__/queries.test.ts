@@ -1,9 +1,11 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import type { AppDatabase } from '@/lib/db/client';
 import {
+  addGoalContribution,
   createGoal,
   createTransaction,
   createTransfer,
+  recordDebtPayment,
 } from '@/lib/db/queries';
 import { MAX_MINOR } from '@/lib/money';
 import { transactionInputSchema } from '@/lib/validation';
@@ -157,11 +159,11 @@ describe('createGoal', () => {
 
 describe('createTransfer', () => {
   it('uses amountMinor for same-currency transfers', async () => {
-    const insertedValues: unknown[] = [];
+    let insertedArray: any = null;
     const mockDb = {
       insert: jest.fn(() => ({
         values: jest.fn((vals) => {
-          insertedValues.push(vals);
+          insertedArray = vals;
           return Promise.resolve();
         }),
       })),
@@ -176,6 +178,140 @@ describe('createTransfer', () => {
       title: 'Test Transfer',
     });
 
-    expect(insertedValues.length).toBeGreaterThan(0);
+    expect(mockDb.insert).toHaveBeenCalledTimes(1);
+    expect(Array.isArray(insertedArray)).toBe(true);
+    expect(insertedArray).toHaveLength(2);
+    const amounts = insertedArray.map((txn: any) => txn.amountMinor);
+    expect(amounts).toEqual([-1500, 1500]);
+  });
+});
+
+describe('addGoalContribution', () => {
+  it('applies amountMinor correctly', async () => {
+    const updatedValues: any[] = [];
+    const mockDb = {
+      select: jest.fn(() => ({
+        from: jest.fn(() => ({
+          where: jest.fn(() => ({
+            limit: jest.fn(() =>
+              Promise.resolve([
+                { id: 'goal1', currentMinor: 5000, currencyCode: 'USD' },
+              ])
+            ),
+          })),
+        })),
+      })),
+      update: jest.fn(() => ({
+        set: jest.fn((vals) => {
+          updatedValues.push(vals);
+          return {
+            where: jest.fn(() => Promise.resolve()),
+          };
+        }),
+      })),
+    } as unknown as AppDatabase;
+
+    await addGoalContribution(mockDb, 'goal1', { amountMinor: 1500 });
+
+    expect(updatedValues).toHaveLength(1);
+    expect(updatedValues[0].currentMinor).toBe(6500);
+  });
+
+  it('applies amount via toMinorUnits when amountMinor not provided', async () => {
+    const updatedValues: any[] = [];
+    const mockDb = {
+      select: jest.fn(() => ({
+        from: jest.fn(() => ({
+          where: jest.fn(() => ({
+            limit: jest.fn(() =>
+              Promise.resolve([
+                { id: 'goal1', currentMinor: 5000, currencyCode: 'USD' },
+              ])
+            ),
+          })),
+        })),
+      })),
+      update: jest.fn(() => ({
+        set: jest.fn((vals) => {
+          updatedValues.push(vals);
+          return {
+            where: jest.fn(() => Promise.resolve()),
+          };
+        }),
+      })),
+    } as unknown as AppDatabase;
+
+    await addGoalContribution(mockDb, 'goal1', {
+      amount: 15,
+      currencyCode: 'USD',
+    });
+
+    expect(updatedValues).toHaveLength(1);
+    expect(updatedValues[0].currentMinor).toBe(6500);
+  });
+});
+
+describe('recordDebtPayment', () => {
+  it('applies amountMinor correctly', async () => {
+    const updatedValues: any[] = [];
+    const mockDb = {
+      select: jest.fn(() => ({
+        from: jest.fn(() => ({
+          where: jest.fn(() => ({
+            limit: jest.fn(() =>
+              Promise.resolve([
+                { id: 'debt1', remainingMinor: 10000, currencyCode: 'USD' },
+              ])
+            ),
+          })),
+        })),
+      })),
+      update: jest.fn(() => ({
+        set: jest.fn((vals) => {
+          updatedValues.push(vals);
+          return {
+            where: jest.fn(() => Promise.resolve()),
+          };
+        }),
+      })),
+    } as unknown as AppDatabase;
+
+    await recordDebtPayment(mockDb, 'debt1', { amountMinor: 3000 });
+
+    expect(updatedValues).toHaveLength(1);
+    expect(updatedValues[0].remainingMinor).toBe(7000);
+  });
+
+  it('applies amount via toMinorUnits when amountMinor not provided', async () => {
+    const updatedValues: any[] = [];
+    const mockDb = {
+      select: jest.fn(() => ({
+        from: jest.fn(() => ({
+          where: jest.fn(() => ({
+            limit: jest.fn(() =>
+              Promise.resolve([
+                { id: 'debt1', remainingMinor: 10000, currencyCode: 'USD' },
+              ])
+            ),
+          })),
+        })),
+      })),
+      update: jest.fn(() => ({
+        set: jest.fn((vals) => {
+          updatedValues.push(vals);
+          return {
+            where: jest.fn(() => Promise.resolve()),
+          };
+        }),
+      })),
+    } as unknown as AppDatabase;
+
+    await recordDebtPayment(mockDb, 'debt1', {
+      amount: 30,
+      currencyCode: 'USD',
+    });
+
+    expect(updatedValues).toHaveLength(1);
+    expect(updatedValues[0].remainingMinor).toBe(7000);
   });
 });

@@ -20,7 +20,7 @@ export const CURRENCIES: Currency[] = [
 
 /**
  * Maximum allowed value in minor units (10 trillion minor = 100 billion major for 2-decimal currencies).
- * Reject amounts above this to prevent overflow and unrealistic values.
+ * Reject amounts at or above this to prevent overflow and unrealistic values.
  */
 export const MAX_MINOR = 1e13;
 
@@ -99,12 +99,18 @@ export function parseAmountToMinor(
   if (!cleaned) return null;
 
   // Then strip currency symbols/codes
+  let hadSymbol = false;
   for (const symbol of currencySymbolsAndCodes) {
     if (cleaned.startsWith(symbol)) {
       cleaned = cleaned.slice(symbol.length).trim();
+      hadSymbol = true;
     }
     if (cleaned.endsWith(symbol)) {
       cleaned = cleaned.slice(0, -symbol.length).trim();
+      if (hadSymbol) {
+        return null;
+      }
+      hadSymbol = true;
     }
   }
 
