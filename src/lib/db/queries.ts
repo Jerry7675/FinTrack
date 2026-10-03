@@ -602,6 +602,29 @@ export async function softDeleteBudget(database: AppDatabase, id: string) {
     .where(eq(budgets.id, id));
 }
 
+export function budgetSpendTransactionConditions(
+  budget: {
+    categoryId: string;
+    accountId: string | null;
+    currencyCode: string;
+  },
+  from: Date,
+  now: Date
+) {
+  const conditions = [
+    isNull(transactions.deletedAt),
+    eq(transactions.type, 'expense'),
+    eq(transactions.categoryId, budget.categoryId),
+    eq(transactions.currencyCode, budget.currencyCode),
+    gte(transactions.occurredAt, from),
+    lte(transactions.occurredAt, now),
+  ];
+  if (budget.accountId) {
+    conditions.push(eq(transactions.accountId, budget.accountId));
+  }
+  return conditions;
+}
+
 /** Sum expense amount for a budget's category (and optional account) in the current period. */
 export async function getBudgetSpend(
   database: AppDatabase,
@@ -609,6 +632,7 @@ export async function getBudgetSpend(
     categoryId: string;
     accountId: string | null;
     period: 'weekly' | 'monthly' | 'yearly';
+    currencyCode: string;
   }
 ): Promise<number> {
   const now = new Date();
@@ -621,23 +645,16 @@ export async function getBudgetSpend(
     from = startOfMonth(now);
   }
 
-  const conditions = [
-    isNull(transactions.deletedAt),
-    eq(transactions.type, 'expense'),
-    eq(transactions.categoryId, budget.categoryId),
-    gte(transactions.occurredAt, from),
-    lte(transactions.occurredAt, now),
-  ];
-  if (budget.accountId) {
-    conditions.push(eq(transactions.accountId, budget.accountId));
-  }
+  const conditions = budgetSpendTransactionConditions(budget, from, now);
 
+  // Exclude transactions from soft-deleted accounts
   const rows = await database
     .select({
       total: sql<number>`coalesce(sum(${transactions.amountMinor}), 0)`,
     })
     .from(transactions)
-    .where(and(...conditions));
+    .innerJoin(accounts, eq(transactions.accountId, accounts.id))
+    .where(and(...conditions, isNull(accounts.deletedAt)));
 
   return Number(rows[0]?.total ?? 0);
 }
