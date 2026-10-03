@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { View } from 'react-native';
 import { scale } from '@/lib/layout';
-import { formatMoney, getCurrency } from '@/lib/money';
+import { formatMoney, moneyA11yLabel } from '@/lib/money';
 import { AppText, useThemeColors } from './primitives';
 
 export type MoneyTone = 'auto' | 'neutral' | 'income' | 'expense';
@@ -11,13 +11,13 @@ export function Money({
   currency,
   tone = 'auto',
   size = 'base',
-  icon,
+  hideArrow = false,
 }: {
   minor: number;
   currency: string;
   tone?: MoneyTone;
   size?: 'xs' | 'sm' | 'base' | 'lg' | 'xl' | 'display';
-  icon?: keyof typeof Ionicons.glyphMap;
+  hideArrow?: boolean;
 }) {
   const c = useThemeColors();
   const formatted = formatMoney(minor, currency);
@@ -47,29 +47,21 @@ export function Money({
       ? `+${formatted}`
       : formatted;
 
-  // Build accessible label using actual currency properties
-  const currencyInfo = getCurrency(currency);
-  const absValue = Math.abs(minor);
-  const majorUnits = Math.floor(absValue / 10 ** currencyInfo.decimals);
-  const minorUnits = absValue % 10 ** currencyInfo.decimals;
+  // Auto-pick arrow icon based on sign
+  const icon = hideArrow
+    ? undefined
+    : isNegative
+      ? ('arrow-down' as const)
+      : !isZero
+        ? ('arrow-up' as const)
+        : undefined;
 
-  let accessibilityLabel = isNegative ? 'minus ' : !isZero ? 'plus ' : '';
-  accessibilityLabel += `${majorUnits} ${currencyInfo.name}`;
-
-  if (currencyInfo.decimals > 0 && minorUnits > 0) {
-    // For currencies with decimals, add fractional part
-    const minorString = minorUnits
-      .toString()
-      .padStart(currencyInfo.decimals, '0');
-    const minorLabel =
-      currencyInfo.decimals === 2 ? 'cents' : currencyInfo.code;
-    accessibilityLabel += ` and ${minorString} ${minorLabel}`;
-  }
+  const accessibilityLabel = moneyA11yLabel(minor, currency);
 
   return (
     <View
       className='flex-row items-center gap-1.5'
-      accessibilityLabel={accessibilityLabel.trim()}
+      accessibilityLabel={accessibilityLabel}
       accessibilityRole='text'
     >
       {icon ? (
