@@ -11,14 +11,12 @@ export function Money({
   currency,
   tone = 'auto',
   size = 'base',
-  showSign = false,
   icon,
 }: {
   minor: number;
   currency: string;
   tone?: MoneyTone;
   size?: 'xs' | 'sm' | 'base' | 'lg' | 'xl' | 'display';
-  showSign?: boolean;
   icon?: keyof typeof Ionicons.glyphMap;
 }) {
   const c = useThemeColors();
@@ -43,8 +41,11 @@ export function Money({
         : c.ink;
 
   // Sign and arrow always reflect the value
-  const displayValue =
-    isNegative ? formatted : !isZero ? `+${formatted}` : formatted;
+  const displayValue = isNegative
+    ? formatted
+    : !isZero
+      ? `+${formatted}`
+      : formatted;
 
   // Build accessible label using actual currency properties
   const currencyInfo = getCurrency(currency);
@@ -54,11 +55,14 @@ export function Money({
 
   let accessibilityLabel = isNegative ? 'minus ' : !isZero ? 'plus ' : '';
   accessibilityLabel += `${majorUnits} ${currencyInfo.name}`;
-  
+
   if (currencyInfo.decimals > 0 && minorUnits > 0) {
     // For currencies with decimals, add fractional part
-    const minorString = minorUnits.toString().padStart(currencyInfo.decimals, '0');
-    const minorLabel = currencyInfo.decimals === 2 ? 'cents' : currencyInfo.code;
+    const minorString = minorUnits
+      .toString()
+      .padStart(currencyInfo.decimals, '0');
+    const minorLabel =
+      currencyInfo.decimals === 2 ? 'cents' : currencyInfo.code;
     accessibilityLabel += ` and ${minorString} ${minorLabel}`;
   }
 

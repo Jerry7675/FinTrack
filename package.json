@@ -80,11 +80,11 @@
     "lint": "biome lint .",
     "lint:fix": "biome lint --write .",
     "type-check": "tsc --noEmit",
-    "test": "node scripts/test-palette-sync.js",
     "format": "biome format --write .",
     "format:check": "biome format .",
     "db:generate": "drizzle-kit generate",
     "test": "jest",
+    "test:palette": "node scripts/test-palette-sync.js",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "prepare": "husky"
