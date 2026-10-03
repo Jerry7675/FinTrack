@@ -80,6 +80,7 @@
     "lint": "biome lint .",
     "lint:fix": "biome lint --write .",
     "type-check": "tsc --noEmit",
+    "test": "node scripts/test-palette-sync.js",
     "format": "biome format --write .",
     "format:check": "biome format .",
     "db:generate": "drizzle-kit generate",
