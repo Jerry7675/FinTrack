@@ -35,9 +35,7 @@ income,500.00,Salary,2024-03-01,USD`;
     expect(result.rows[1].amount).toBe(500);
   });
 
-  // NOTE: This test currently fails because CSV import uses parseFloat which doesn't
-  // handle comma decimals. This will be fixed in PR #3 when parseAmountToMinor is integrated.
-  it.skip('handles comma decimal separators in amount', () => {
+  it('handles comma decimal separators in amount', () => {
     const csv = `type,amount,title,date
 expense,"15,50",Coffee,2024-03-15
 income,"500,00",Salary,2024-03-01`;

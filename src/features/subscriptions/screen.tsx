@@ -28,7 +28,7 @@ import {
   subscriptionMonthlyMinor,
 } from '@/lib/forecast';
 import { layout } from '@/lib/layout';
-import { formatMoney, fromMinorUnits, parseAmountToMinor } from '@/lib/money';
+import { formatMoney, parseAmountToMinor } from '@/lib/money';
 import { useApp } from '@/providers/app-provider';
 
 const CADENCE_OPTIONS = [
@@ -83,7 +83,7 @@ export function SubscriptionsScreen() {
     await createSubscription(db, {
       accountId: account.id,
       name: name.trim(),
-      amount: fromMinorUnits(amountMinor, account.currencyCode),
+      amountMinor,
       currencyCode: account.currencyCode,
       cadence,
     });

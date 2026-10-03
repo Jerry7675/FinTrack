@@ -26,7 +26,7 @@ import {
 } from '@/lib/db/queries';
 import type { Category, RecurringTemplate } from '@/lib/db/schema';
 import { layout } from '@/lib/layout';
-import { formatMoney, fromMinorUnits, parseAmountToMinor } from '@/lib/money';
+import { formatMoney, parseAmountToMinor } from '@/lib/money';
 import type { RecurringCadence } from '@/lib/planning';
 import { useApp } from '@/providers/app-provider';
 
@@ -132,7 +132,7 @@ export function RecurringScreen() {
       categoryId: categoryId || null,
       type,
       title: title.trim(),
-      amount: fromMinorUnits(amountMinor, account.currencyCode),
+      amountMinor,
       currencyCode: account.currencyCode,
       cadence,
       intervalDays,

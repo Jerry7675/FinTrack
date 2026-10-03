@@ -24,7 +24,7 @@ import {
 } from '@/lib/db/queries';
 import type { Debt } from '@/lib/db/schema';
 import { layout } from '@/lib/layout';
-import { formatMoney, fromMinorUnits, parseAmountToMinor } from '@/lib/money';
+import { formatMoney, parseAmountToMinor } from '@/lib/money';
 import { useApp } from '@/providers/app-provider';
 
 export function DebtsScreen() {
@@ -54,7 +54,7 @@ export function DebtsScreen() {
     await createDebt(db, {
       name: name.trim(),
       kind,
-      principal: fromMinorUnits(amountMinor, currency),
+      principalMinor: amountMinor,
       currencyCode: currency,
     });
     setName('');
@@ -75,8 +75,8 @@ export function DebtsScreen() {
     await recordDebtPayment(
       db,
       payId,
-      fromMinorUnits(amountMinor, currency),
-      currency
+      undefined,
+      amountMinor,
     );
     setPayId(null);
     setPayAmount('');
