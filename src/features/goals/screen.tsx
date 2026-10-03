@@ -26,7 +26,7 @@ import {
 } from '@/lib/db/queries';
 import type { Goal } from '@/lib/db/schema';
 import { layout } from '@/lib/layout';
-import { formatMoney } from '@/lib/money';
+import { formatMoney, fromMinorUnits, parseAmountToMinor } from '@/lib/money';
 import { goalSuggestedMonthly } from '@/lib/planning';
 import { useApp } from '@/providers/app-provider';
 
@@ -49,15 +49,20 @@ export function GoalsScreen() {
   useReloadOnFocus(load);
 
   const add = async () => {
-    const value = Number.parseFloat(target);
-    const startVal = starting.trim() ? Number.parseFloat(starting) : undefined;
-    if (!name.trim() || !Number.isFinite(value)) {
-      Alert.alert('Enter name and target');
+    const currency = settings?.defaultCurrency ?? 'USD';
+    const targetMinor = parseAmountToMinor(target, currency);
+    if (!name.trim() || targetMinor === null || targetMinor <= 0) {
+      Alert.alert('Enter name and valid target amount');
       return;
     }
-    if (startVal != null && !Number.isFinite(startVal)) {
-      Alert.alert('Starting amount must be a number');
-      return;
+    let startMinor: number | undefined;
+    if (starting.trim()) {
+      const parsed = parseAmountToMinor(starting.trim(), currency);
+      if (parsed === null) {
+        Alert.alert('Starting amount must be a valid number');
+        return;
+      }
+      startMinor = parsed;
     }
     let deadlineAt: Date | null = null;
     if (deadline.trim()) {
@@ -70,9 +75,9 @@ export function GoalsScreen() {
     }
     await createGoal(db, {
       name: name.trim(),
-      target: value,
-      current: startVal,
-      currencyCode: settings?.defaultCurrency ?? 'USD',
+      target: fromMinorUnits(targetMinor, currency),
+      current: startMinor !== undefined ? fromMinorUnits(startMinor, currency) : undefined,
+      currencyCode: currency,
       deadlineAt,
     });
     setName('');
@@ -85,17 +90,18 @@ export function GoalsScreen() {
 
   const submitContribution = async () => {
     if (!contributeId) return;
-    const value = Number.parseFloat(contributeAmount);
-    if (!Number.isFinite(value) || value <= 0) {
+    const goal = items.find((g) => g.id === contributeId);
+    const currency = goal?.currencyCode ?? settings?.defaultCurrency ?? 'USD';
+    const amountMinor = parseAmountToMinor(contributeAmount, currency);
+    if (amountMinor === null || amountMinor <= 0) {
       Alert.alert('Enter a positive contribution amount');
       return;
     }
-    const goal = items.find((g) => g.id === contributeId);
     await addGoalContribution(
       db,
       contributeId,
-      value,
-      goal?.currencyCode ?? settings?.defaultCurrency ?? 'USD'
+      fromMinorUnits(amountMinor, currency),
+      currency
     );
     setContributeId(null);
     setContributeAmount('');

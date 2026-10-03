@@ -16,7 +16,7 @@ import { listGoals, listTransactions } from '@/lib/db/queries';
 import type { Goal } from '@/lib/db/schema';
 import { whatIfGoalMonths, whatIfReduceSpend } from '@/lib/forecast';
 import { layout } from '@/lib/layout';
-import { formatMoney, fromMinorUnits, toMinorUnits } from '@/lib/money';
+import { formatMoney, fromMinorUnits, parseAmountToMinor } from '@/lib/money';
 import { useApp } from '@/providers/app-provider';
 
 export function WhatIfScreen() {
@@ -56,8 +56,7 @@ export function WhatIfScreen() {
   const spendScenario = whatIfReduceSpend(monthlySpend, pct);
 
   const goal = goals.find((g) => g.id === goalId);
-  const contribMajor = Number.parseFloat(contribution) || 0;
-  const contribMinor = toMinorUnits(contribMajor, currency);
+  const contribMinor = parseAmountToMinor(contribution, currency) || 0;
   const remaining = goal
     ? Math.max(0, goal.targetMinor - goal.currentMinor)
     : 0;
@@ -146,7 +145,7 @@ export function WhatIfScreen() {
                     ? 'Already complete'
                     : `Estimated completion in about ${months} month${months === 1 ? '' : 's'}`}
               </AppText>
-              {goal && contribMajor > 0 ? (
+              {goal && contribMinor > 0 ? (
                 <AppText size='xs' muted className='mt-1'>
                   At {formatMoney(contribMinor, goal.currencyCode)}/mo from{' '}
                   {fromMinorUnits(remaining, goal.currencyCode)} left

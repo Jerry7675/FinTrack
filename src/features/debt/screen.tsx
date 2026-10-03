@@ -24,7 +24,7 @@ import {
 } from '@/lib/db/queries';
 import type { Debt } from '@/lib/db/schema';
 import { layout } from '@/lib/layout';
-import { formatMoney } from '@/lib/money';
+import { formatMoney, fromMinorUnits, parseAmountToMinor } from '@/lib/money';
 import { useApp } from '@/providers/app-provider';
 
 export function DebtsScreen() {
@@ -45,16 +45,17 @@ export function DebtsScreen() {
   useReloadOnFocus(load);
 
   const add = async () => {
-    const value = Number.parseFloat(amount);
-    if (!name.trim() || !Number.isFinite(value)) {
-      Alert.alert('Enter name and amount');
+    const currency = settings?.defaultCurrency ?? 'USD';
+    const amountMinor = parseAmountToMinor(amount, currency);
+    if (!name.trim() || amountMinor === null || amountMinor <= 0) {
+      Alert.alert('Enter name and valid amount');
       return;
     }
     await createDebt(db, {
       name: name.trim(),
       kind,
-      principal: value,
-      currencyCode: settings?.defaultCurrency ?? 'USD',
+      principal: fromMinorUnits(amountMinor, currency),
+      currencyCode: currency,
     });
     setName('');
     setAmount('');
@@ -64,17 +65,18 @@ export function DebtsScreen() {
 
   const submitPayment = async () => {
     if (!payId) return;
-    const value = Number.parseFloat(payAmount);
-    if (!Number.isFinite(value) || value <= 0) {
-      Alert.alert('Enter a payment amount');
+    const debt = items.find((d) => d.id === payId);
+    const currency = debt?.currencyCode ?? settings?.defaultCurrency ?? 'USD';
+    const amountMinor = parseAmountToMinor(payAmount, currency);
+    if (amountMinor === null || amountMinor <= 0) {
+      Alert.alert('Enter a valid payment amount');
       return;
     }
-    const debt = items.find((d) => d.id === payId);
     await recordDebtPayment(
       db,
       payId,
-      value,
-      debt?.currencyCode ?? settings?.defaultCurrency ?? 'USD'
+      fromMinorUnits(amountMinor, currency),
+      currency
     );
     setPayId(null);
     setPayAmount('');
