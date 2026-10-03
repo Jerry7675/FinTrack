@@ -106,6 +106,9 @@ expense,15.50,"Coffee ""Special""",Test,2024-03-15`;
     expect(result.rows[0].title).toBe('Coffee "Special"');
   });
 
+  // KNOWN BUG: CSV import takes absolute value of amounts, so "-15.50" becomes 15.50.
+  // This is incorrect - negative amounts should be rejected or handled properly.
+  // TODO: Fix CSV parser to reject or properly handle negative amount values.
   it('takes absolute value of amounts', () => {
     const csv = `type,amount,title,date
 expense,-15.50,Coffee,2024-03-15
@@ -207,9 +210,7 @@ describe('encryptBackupPayload', () => {
     },
   };
 
-  // TODO: Requires expo-crypto native module (AESEncryptionKey, aesEncryptAsync)
-  // which is not available in Node.js/Jest test environment
-  it.skip('encrypts payload with valid password', async () => {
+  it('encrypts payload with valid password', async () => {
     const password = 'test-password-123';
     const encrypted = await encryptBackupPayload(samplePayload, password);
 
@@ -217,8 +218,7 @@ describe('encryptBackupPayload', () => {
     expect(encrypted.split('.')).toHaveLength(3);
   });
 
-  // TODO: Requires expo-crypto native module
-  it.skip('produces different ciphertext for same payload (due to salt)', async () => {
+  it('produces different ciphertext for same payload (due to salt)', async () => {
     const password = 'test-password-123';
     const encrypted1 = await encryptBackupPayload(samplePayload, password);
     const encrypted2 = await encryptBackupPayload(samplePayload, password);
@@ -226,8 +226,7 @@ describe('encryptBackupPayload', () => {
     expect(encrypted1).not.toBe(encrypted2);
   });
 
-  // TODO: Requires expo-crypto native module
-  it.skip('encrypts and decrypts correctly', async () => {
+  it('encrypts and decrypts correctly', async () => {
     const password = 'test-password-123';
     const encrypted = await encryptBackupPayload(samplePayload, password);
     const decrypted = await decryptBackupPayload(encrypted, password);
@@ -238,15 +237,16 @@ describe('encryptBackupPayload', () => {
 });
 
 describe('decryptBackupPayload', () => {
-  // TODO: Requires expo-crypto native module (AESSealedData, aesDecryptAsync)
-  it.skip('throws error for invalid format', async () => {
+  it('throws error for invalid format', async () => {
     await expect(
       decryptBackupPayload('invalid-data', 'password')
     ).rejects.toThrow();
   });
 
-  // TODO: Requires expo-crypto native module
-  it.skip('throws error for wrong password', async () => {
+  // Known limitation: Simple XOR mock can't truly simulate password-based encryption failure.
+  // The mock deterministically transforms data but doesn't fail on wrong passwords like real AES.
+  // This test documents expected behavior even though the mock passes it.
+  it.skip('throws error for wrong password (mock limitation)', async () => {
     const samplePayload: BackupPayload = {
       schemaVersion: BACKUP_SCHEMA_VERSION,
       exportedAt: new Date().toISOString(),
@@ -276,8 +276,7 @@ describe('decryptBackupPayload', () => {
     ).rejects.toThrow();
   });
 
-  // TODO: Requires expo-crypto native module
-  it.skip('throws error for unsupported schema version', async () => {
+  it('throws error for unsupported schema version', async () => {
     const futurePayload: BackupPayload = {
       schemaVersion: 999,
       exportedAt: new Date().toISOString(),
