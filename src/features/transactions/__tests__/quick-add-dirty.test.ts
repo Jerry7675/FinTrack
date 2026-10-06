@@ -34,6 +34,12 @@ describe('isQuickAddUserDirty', () => {
     );
   });
 
+  it('detects transfer to-account pick', () => {
+    expect(isQuickAddUserDirty({ ...base, userPickedToAccount: true })).toBe(
+      true
+    );
+  });
+
   it('detects date change from opened default', () => {
     expect(
       isQuickAddUserDirty({

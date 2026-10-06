@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from '@jest/globals';
 import Database from 'better-sqlite3';
-import { eq } from 'drizzle-orm';
+import { and, eq, lt } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 
 import type { AppDatabase } from '@/lib/db/client';
@@ -235,6 +235,13 @@ describe('category usage queries', () => {
       title: 'Valid',
       occurredAt: FIXED_NOW,
     });
+    await drizzleDb
+      .update(transactions)
+      .set({
+        createdAt: new Date(ts),
+        updatedAt: new Date(ts),
+      })
+      .where(eq(transactions.title, 'Valid'));
 
     await createTransaction(db, {
       accountId: 'acc',
@@ -249,6 +256,19 @@ describe('category usage queries', () => {
       .update(categories)
       .set({ deletedAt: new Date() })
       .where(eq(categories.id, 'cat-b'));
+
+    await drizzleDb.insert(transactions).values({
+      id: 'tx-deleted-cat',
+      accountId: 'acc',
+      categoryId: 'cat-b',
+      type: 'expense',
+      amountMinor: 888,
+      currencyCode: 'USD',
+      title: 'Deleted category',
+      occurredAt: FIXED_NOW,
+      createdAt: new Date(ts + 5_000),
+      updatedAt: new Date(ts + 5_000),
+    });
 
     await drizzleDb.insert(accounts).values({
       id: 'acc-gone',
@@ -292,6 +312,13 @@ describe('category usage queries', () => {
       title: 'On live account',
       occurredAt: FIXED_NOW,
     });
+    await drizzleDb
+      .update(transactions)
+      .set({
+        createdAt: new Date(ts),
+        updatedAt: new Date(ts),
+      })
+      .where(eq(transactions.title, 'On live account'));
 
     await drizzleDb.insert(accounts).values({
       id: 'acc-gone',
@@ -333,13 +360,22 @@ describe('category usage queries', () => {
       fromCurrency: 'USD',
       toCurrency: 'USD',
       title: 'Older created',
-      occurredAt: new Date('2020-01-01T00:00:00.000Z'),
+      occurredAt: new Date('2099-06-01T00:00:00.000Z'),
     });
 
     await drizzleDb
       .update(transactions)
-      .set({ createdAt: new Date(ts), updatedAt: new Date(ts) })
-      .where(eq(transactions.title, 'Older created'));
+      .set({
+        createdAt: new Date(ts),
+        updatedAt: new Date(ts),
+        occurredAt: new Date('2099-06-01T00:00:00.000Z'),
+      })
+      .where(
+        and(
+          eq(transactions.title, 'Older created'),
+          lt(transactions.amountMinor, 0)
+        )
+      );
 
     await createTransfer(db, {
       fromAccountId: 'acc-2',
@@ -348,8 +384,22 @@ describe('category usage queries', () => {
       fromCurrency: 'USD',
       toCurrency: 'USD',
       title: 'Newer created',
-      occurredAt: new Date('2099-01-01T00:00:00.000Z'),
+      occurredAt: new Date('2020-01-01T00:00:00.000Z'),
     });
+
+    await drizzleDb
+      .update(transactions)
+      .set({
+        createdAt: new Date(ts + 10_000),
+        updatedAt: new Date(ts + 10_000),
+        occurredAt: new Date('2020-01-01T00:00:00.000Z'),
+      })
+      .where(
+        and(
+          eq(transactions.title, 'Newer created'),
+          lt(transactions.amountMinor, 0)
+        )
+      );
 
     const last = await getLastEntry(db, 'transfer', FIXED_NOW);
     expect(last?.title).toBe('Newer created');
