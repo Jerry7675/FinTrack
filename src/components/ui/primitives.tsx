@@ -363,7 +363,7 @@ export function Select({
         style={{
           minHeight: Math.max(44, vs(48)),
           borderWidth: 1,
-          borderColor: c.lineStrong,
+          borderColor: error ? c.expense : c.lineStrong,
         }}
       >
         <Text
