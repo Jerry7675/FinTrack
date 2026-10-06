@@ -249,6 +249,16 @@ function hslToRgb(hsl: { h: number; s: number; l: number }): {
   };
 }
 
+const HEX_COLOR_BODY = /^[0-9A-Fa-f]+$/;
+
+function assertValidHexColorBody(clean: string, original: string): void {
+  if (!HEX_COLOR_BODY.test(clean)) {
+    throw new Error(
+      `Invalid hex color "${original}": hex digits must be 0-9 or A-F`
+    );
+  }
+}
+
 /**
  * Add or replace alpha suffix on a hex color.
  * Expands 3-digit hex, strips existing alpha if present, then appends new alpha.
@@ -261,19 +271,24 @@ export function withAlpha(hex: string, alphaHex: string): string {
 
   let base: string;
   if (clean.length === 3) {
-    // Expand #RGB to #RRGGBB
+    assertValidHexColorBody(clean, hex);
     base = clean
       .split('')
       .map((c) => c + c)
       .join('');
   } else if (clean.length === 6) {
+    assertValidHexColorBody(clean, hex);
     base = clean;
   } else if (clean.length === 8) {
-    // Strip existing alpha
-    base = clean.slice(0, 6);
+    const rgbPart = clean.slice(0, 6);
+    const alphaPart = clean.slice(6, 8);
+    assertValidHexColorBody(rgbPart, hex);
+    assertValidHexColorBody(alphaPart, hex);
+    base = rgbPart;
   } else {
-    // Invalid format, return as-is with alpha appended
-    return `#${clean}${alphaHex}`;
+    throw new Error(
+      `Invalid hex color "${hex}": expected 3, 6, or 8 hex digits after #`
+    );
   }
 
   return `#${base.toUpperCase()}${alphaHex}`;
