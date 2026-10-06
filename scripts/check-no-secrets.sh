@@ -6,6 +6,17 @@ cd "$ROOT"
 
 PATTERN='sk-or-|OPENROUTER_API_KEY|openrouter\.ai'
 
+print_match_locations_only() {
+  local hits=$1
+  while IFS= read -r line; do
+    [ -z "$line" ] && continue
+    # grep -rEn format: path:lineno:matched-text (do not echo matched text)
+    local location
+    location="$(printf '%s\n' "$line" | sed -E 's/^(.+):([0-9]+):.*/\1:\2/')"
+    echo "  ${location}"
+  done <<< "$hits"
+}
+
 run_grep_scan() {
   local target=$1
   local label=$2
@@ -20,7 +31,7 @@ run_grep_scan() {
 
   if [ "$ec" -eq 0 ]; then
     echo "FAIL: forbidden pattern found in ${label}"
-    echo "$hits"
+    print_match_locations_only "$hits"
     return 1
   fi
   if [ "$ec" -eq 1 ]; then
@@ -28,7 +39,6 @@ run_grep_scan() {
     return 0
   fi
   echo "FAIL: grep exited ${ec} while scanning ${label} (tool missing or I/O error)"
-  echo "$hits"
   return 2
 }
 
@@ -52,13 +62,24 @@ run_self_test() {
   local tmp
   tmp="$(mktemp -d)"
   printf '%s\n' 'sk-or-test-planted-for-ci' >"${tmp}/leak.txt"
-  if run_grep_scan "$tmp" "self-test temp dir"; then
-    rm -rf "$tmp"
+  local out
+  set +e
+  out="$(run_grep_scan "$tmp" "self-test temp dir" 2>&1)"
+  local ec=$?
+  set -e
+  rm -rf "$tmp"
+  if [ "$ec" -eq 0 ]; then
+    echo "$out"
     echo "FAIL: self-test did not detect planted secret string"
     exit 1
   fi
-  rm -rf "$tmp"
-  echo "OK: self-test detected planted secret (grep exit 0 -> scan failed as expected)"
+  if printf '%s' "$out" | grep -q 'sk-or-test-planted'; then
+    echo "$out"
+    echo "FAIL: self-test output leaked matched secret text"
+    exit 1
+  fi
+  echo "$out"
+  echo "OK: self-test detected planted secret without printing secret text"
 }
 
 if [ "${1:-}" = "--self-test" ]; then
