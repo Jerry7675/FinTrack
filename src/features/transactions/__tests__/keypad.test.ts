@@ -2,6 +2,7 @@ import { describe, expect, it } from '@jest/globals';
 
 import {
   formatKeypadDisplay,
+  formatMaxAmountLabel,
   keypadReducer,
 } from '@/features/transactions/keypad-logic';
 
@@ -66,5 +67,13 @@ describe('formatKeypadDisplay', () => {
 
   it('returns empty for blank input', () => {
     expect(formatKeypadDisplay('', 'USD', 'en-US')).toBe('');
+  });
+});
+
+describe('formatMaxAmountLabel', () => {
+  it('formats de-DE without mangling grouping separators', () => {
+    const label = formatMaxAmountLabel('USD', 'de-DE');
+    expect(label).toMatch(/^\d{1,3}(\.\d{3})*,\d{2}$/);
+    expect(label).not.toContain('.,');
   });
 });

@@ -131,13 +131,9 @@ export function formatMaxAmountLabel(
   const maxMinor = MAX_MINOR - 1;
   const { decimals } = getCurrency(currencyCode);
   const major = decimals === 0 ? maxMinor : maxMinor / 10 ** decimals;
-  const decSep = localeDecimalSeparator(locale);
-  const formatted = new Intl.NumberFormat(locale, {
+  return new Intl.NumberFormat(locale, {
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,
     useGrouping: true,
-  })
-    .format(major)
-    .replace('.', decSep);
-  return formatted;
+  }).format(major);
 }

@@ -5,7 +5,11 @@ import { AppText, useThemeColors } from '@/components/ui/primitives';
 import { fontSize, scale, vs } from '@/lib/layout';
 import { getCurrency } from '@/lib/money';
 
-import { type KeypadAction, keypadReducer } from './keypad-logic';
+import {
+  formatKeypadDisplay,
+  type KeypadAction,
+  keypadReducer,
+} from './keypad-logic';
 
 export type { KeypadAction, KeypadReducerResult } from './keypad-logic';
 export {
