@@ -633,6 +633,7 @@ function AddTransactionSheetBody({
             await Promise.all(imagesToAttach.map((p) => deleteLocalImage(p)));
           } else {
             showToast(attachmentMessage, 'error');
+            await Promise.all(imagesToAttach.map((p) => deleteLocalImage(p)));
           }
         } else {
           showRootToast('Saved', 'success');
