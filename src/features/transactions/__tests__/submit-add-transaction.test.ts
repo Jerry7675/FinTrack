@@ -86,6 +86,16 @@ describe('resolveTransactionTitle', () => {
   it('keeps a typed title', () => {
     expect(resolveTransactionTitle(baseValues, categories)).toBe('Coffee');
   });
+
+  it('truncates a long category name to the title max', () => {
+    const longName = 'x'.repeat(130);
+    expect(
+      resolveTransactionTitle(
+        { ...baseValues, title: '', categoryId: 'cat-long' },
+        [{ id: 'cat-long', name: longName }]
+      )
+    ).toHaveLength(120);
+  });
 });
 
 describe('validateTransactionDate', () => {
@@ -326,6 +336,50 @@ describe('submitAddTransaction', () => {
 
     expect(createTransaction).toHaveBeenCalledWith(
       expect.objectContaining({ title: 'Food' })
+    );
+  });
+
+  it('returns a title field error when category and title are both missing', async () => {
+    const createTransaction = jest.fn();
+    const result = await submitAddTransaction(
+      {
+        ...baseValues,
+        title: '',
+        categoryId: null,
+      },
+      {
+        ...deps,
+        categories: [],
+        createTransaction,
+      }
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        type: 'field',
+        field: 'title',
+        message: 'Select a category or add a title',
+      },
+    });
+    expect(createTransaction).not.toHaveBeenCalled();
+  });
+
+  it('truncates category-derived title to 120 characters at save time', async () => {
+    const longName = 'y'.repeat(130);
+    const createTransaction = jest.fn().mockResolvedValue('tx-3');
+
+    await submitAddTransaction(
+      { ...baseValues, title: '', categoryId: 'cat-long' },
+      {
+        ...deps,
+        categories: [{ id: 'cat-long', name: longName }],
+        createTransaction,
+      }
+    );
+
+    expect(createTransaction).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'y'.repeat(120) })
     );
   });
 

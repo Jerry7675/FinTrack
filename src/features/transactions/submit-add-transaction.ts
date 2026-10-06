@@ -208,7 +208,12 @@ export function resolveTransactionTitle(
   if (trimmed) return trimmed;
   if (values.mode === 'transfer') return 'Transfer';
   const category = categories.find((c) => c.id === values.categoryId);
-  return category?.name ?? '';
+  const fromCategory = category?.name ?? '';
+  if (!fromCategory) return '';
+  if (fromCategory.length <= TRANSACTION_LIMITS.titleMax) {
+    return fromCategory;
+  }
+  return fromCategory.slice(0, TRANSACTION_LIMITS.titleMax);
 }
 
 export function validateAddTransactionInput(
