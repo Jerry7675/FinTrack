@@ -27,10 +27,7 @@ type ToastContextValue = {
 
 const ToastContext = createContext<ToastContextValue | null>(null);
 
-export function ToastProvider({ children }: { children: React.ReactNode }) {
-  const { colorScheme } = useApp();
-  const c = colors(colorScheme === 'dark' ? 'dark' : 'light');
-  const insets = useSafeAreaInsets();
+function useToastController() {
   const [toast, setToast] = useState<ToastState>(null);
   const opacity = useRef(new Animated.Value(0)).current;
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -58,12 +55,29 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     [hide, opacity]
   );
 
-  const value = useMemo(() => ({ showToast }), [showToast]);
+  return { toast, opacity, hide, showToast };
+}
+
+function ToastBanner({
+  toast,
+  opacity,
+  hide,
+  topInset,
+}: {
+  toast: ToastState;
+  opacity: Animated.Value;
+  hide: () => void;
+  topInset: number;
+}) {
+  const { colorScheme } = useApp();
+  const c = colors(colorScheme === 'dark' ? 'dark' : 'light');
+
+  if (!toast) return null;
 
   const config =
-    toast?.tone === 'error'
+    toast.tone === 'error'
       ? { bg: c.expense, fg: c.inkInverse, icon: 'alert-circle' as const }
-      : toast?.tone === 'success'
+      : toast.tone === 'success'
         ? { bg: c.income, fg: c.inkInverse, icon: 'checkmark-circle' as const }
         : {
             bg: c.surfaceOverlay,
@@ -72,57 +86,92 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
           };
 
   return (
-    <ToastContext.Provider value={value}>
-      {children}
-      {toast ? (
-        <Animated.View
-          pointerEvents='box-none'
+    <Animated.View
+      pointerEvents='box-none'
+      style={{
+        position: 'absolute',
+        left: scale(16),
+        right: scale(16),
+        top: topInset,
+        opacity,
+        zIndex: 9999,
+        elevation: 20,
+      }}
+    >
+      <Pressable
+        onPress={hide}
+        style={{
+          backgroundColor: config.bg,
+          borderRadius: scale(16),
+          paddingHorizontal: scale(16),
+          paddingVertical: vs(14),
+          shadowColor: '#000',
+          shadowOpacity: 0.25,
+          shadowRadius: 12,
+          shadowOffset: { width: 0, height: 6 },
+        }}
+      >
+        <View
           style={{
-            position: 'absolute',
-            left: scale(16),
-            right: scale(16),
-            top: insets.top + vs(8),
-            opacity,
-            zIndex: 9999,
-            elevation: 20,
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 8,
+            justifyContent: 'center',
           }}
         >
-          <Pressable
-            onPress={hide}
+          <Ionicons name={config.icon} size={scale(18)} color={config.fg} />
+          <Text
             style={{
-              backgroundColor: config.bg,
-              borderRadius: scale(16),
-              paddingHorizontal: scale(16),
-              paddingVertical: vs(14),
-              shadowColor: '#000',
-              shadowOpacity: 0.25,
-              shadowRadius: 12,
-              shadowOffset: { width: 0, height: 6 },
+              color: config.fg,
+              fontSize: fontSize(14),
+              fontWeight: '600',
             }}
           >
-            <View
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: 8,
-                justifyContent: 'center',
-              }}
-            >
-              <Ionicons name={config.icon} size={scale(18)} color={config.fg} />
-              <Text
-                style={{
-                  color: config.fg,
-                  fontSize: fontSize(14),
-                  fontWeight: '600',
-                }}
-              >
-                {toast.message}
-              </Text>
-            </View>
-          </Pressable>
-        </Animated.View>
-      ) : null}
+            {toast.message}
+          </Text>
+        </View>
+      </Pressable>
+    </Animated.View>
+  );
+}
+
+export function ToastProvider({ children }: { children: React.ReactNode }) {
+  const insets = useSafeAreaInsets();
+  const { toast, opacity, hide, showToast } = useToastController();
+  const value = useMemo(() => ({ showToast }), [showToast]);
+
+  return (
+    <ToastContext.Provider value={value}>
+      {children}
+      <ToastBanner
+        toast={toast}
+        opacity={opacity}
+        hide={hide}
+        topInset={insets.top + vs(8)}
+      />
     </ToastContext.Provider>
+  );
+}
+
+/** Toast host scoped inside a native Modal (renders above sheet content). */
+export function ModalToastProvider({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const { toast, opacity, hide, showToast } = useToastController();
+  const value = useMemo(() => ({ showToast }), [showToast]);
+
+  return (
+    <View style={{ flex: 1 }}>
+      <ToastContext.Provider value={value}>{children}</ToastContext.Provider>
+      <ToastBanner
+        toast={toast}
+        opacity={opacity}
+        hide={hide}
+        topInset={vs(8)}
+      />
+    </View>
   );
 }
 
@@ -131,7 +180,6 @@ export function useToast() {
   if (!ctx) {
     return {
       showToast: (message: string) => {
-        // Fallback when provider missing
         console.warn(message);
       },
     };

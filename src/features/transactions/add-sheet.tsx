@@ -1,6 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useEffect, useState } from 'react';
-import { Controller, useForm } from 'react-hook-form';
+import { type Href, router } from 'expo-router';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Controller, type FieldErrors, useForm } from 'react-hook-form';
 import {
   KeyboardAvoidingView,
   Modal,
@@ -21,8 +22,9 @@ import {
   Field,
   IconButton,
   Select,
+  useThemeColors,
 } from '@/components/ui/primitives';
-import { useToast } from '@/components/ui/toast';
+import { ModalToastProvider, useToast } from '@/components/ui/toast';
 import { db } from '@/lib/db/client';
 import {
   addAttachments,
@@ -36,6 +38,13 @@ import { persistImage, pickImage, takePhoto } from '@/lib/media';
 import { fromMinorUnits, parseAmountToMinor } from '@/lib/money';
 import { useApp } from '@/providers/app-provider';
 
+import {
+  type AddTransactionField,
+  firstAddTransactionFieldWithError,
+  getAddTransactionSaveAvailability,
+  submitAddTransaction,
+} from './submit-add-transaction';
+
 type Props = {
   visible: boolean;
   onClose: () => void;
@@ -44,50 +53,68 @@ type Props = {
 
 const formSchema = z.object({
   mode: z.enum(['expense', 'income', 'transfer']),
-  amount: z.string().min(1),
+  amount: z.string().min(1, 'Enter an amount'),
   title: z.string(),
   note: z.string().optional(),
   tags: z.string().optional(),
-  accountId: z.string().min(1),
+  accountId: z.string().min(1, 'Select an account'),
   toAccountId: z.string().optional(),
   categoryId: z.string().nullable().optional(),
 });
 
 type FormValues = z.infer<typeof formSchema>;
 
-export function AddTransactionSheet({ visible, onClose, onSaved }: Props) {
-  const { accounts, settings, colorScheme, bumpData } = useApp();
+function AddTransactionSheetBody({ visible, onClose, onSaved }: Props) {
+  const { accounts, settings, colorScheme, bumpData, ready } = useApp();
   const { showToast } = useToast();
+  const c = useThemeColors();
   const insets = useSafeAreaInsets();
   const [categories, setCategories] = useState<Category[]>([]);
   const [saving, setSaving] = useState(false);
   const [pendingImages, setPendingImages] = useState<string[]>([]);
+  const scrollRef = useRef<ScrollView>(null);
+  const fieldOffsets = useRef<Partial<Record<AddTransactionField, number>>>({});
 
-  const { control, handleSubmit, watch, setValue, reset } = useForm<FormValues>(
-    {
-      resolver: zodResolver(formSchema),
-      defaultValues: {
-        mode: 'expense',
-        amount: '',
-        title: '',
-        note: '',
-        tags: '',
-        accountId: settings?.activeAccountId || accounts[0]?.id || '',
-        toAccountId: '',
-        categoryId: null,
-      },
-    }
-  );
+  const {
+    control,
+    handleSubmit,
+    watch,
+    setValue,
+    reset,
+    setFocus,
+    setError,
+    formState: { errors },
+  } = useForm<FormValues>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      mode: 'expense',
+      amount: '',
+      title: '',
+      note: '',
+      tags: '',
+      accountId: '',
+      toAccountId: '',
+      categoryId: null,
+    },
+  });
 
   const mode = watch('mode');
   const accountId = watch('accountId');
   const categoryId = watch('categoryId');
-  const account = accounts.find((a) => a.id === accountId) ?? accounts[0];
+  const account = accounts.find((a) => a.id === accountId);
   const currency = account?.currencyCode ?? settings?.defaultCurrency ?? 'USD';
 
+  const saveAvailability = getAddTransactionSaveAvailability(
+    Boolean(ready),
+    accounts.length
+  );
+
   useEffect(() => {
-    if (!visible) return;
-    setValue('accountId', settings?.activeAccountId || accounts[0]?.id || '');
+    if (!visible || !ready) return;
+    const nextId = settings?.activeAccountId || accounts[0]?.id || '';
+    if (nextId) {
+      setValue('accountId', nextId);
+    }
     listCategories(
       db,
       mode === 'transfer' ? undefined : mode === 'income' ? 'income' : 'expense'
@@ -95,7 +122,38 @@ export function AddTransactionSheet({ visible, onClose, onSaved }: Props) {
       setCategories(rows);
       setValue('categoryId', rows[0]?.id ?? null);
     });
-  }, [visible, mode, settings?.activeAccountId, accounts, setValue]);
+  }, [visible, ready, mode, settings?.activeAccountId, accounts, setValue]);
+
+  const registerFieldOffset = useCallback(
+    (field: AddTransactionField, y: number) => {
+      fieldOffsets.current[field] = y;
+    },
+    []
+  );
+
+  const focusField = useCallback(
+    (field: AddTransactionField) => {
+      setFocus(field);
+      const y = fieldOffsets.current[field];
+      if (y != null) {
+        scrollRef.current?.scrollTo({
+          y: Math.max(0, y - 12),
+          animated: true,
+        });
+      }
+    },
+    [setFocus]
+  );
+
+  const onInvalid = useCallback(
+    (formErrors: FieldErrors<FormValues>) => {
+      const first = firstAddTransactionFieldWithError(
+        formErrors as Partial<Record<AddTransactionField, { message?: string }>>
+      );
+      if (first) focusField(first);
+    },
+    [focusField]
+  );
 
   const onPickReceipts = async () => {
     try {
@@ -122,62 +180,54 @@ export function AddTransactionSheet({ visible, onClose, onSaved }: Props) {
   };
 
   const save = handleSubmit(async (values) => {
-    if (!account) {
-      showToast('Create an account first', 'error');
-      return;
-    }
-    const amountMinor = parseAmountToMinor(values.amount, currency);
-    if (amountMinor === null || amountMinor <= 0) {
-      showToast('Enter a valid amount', 'error');
-      return;
-    }
-    if (!values.title.trim() && values.mode !== 'transfer') {
-      showToast('Add a title', 'error');
-      return;
-    }
     setSaving(true);
     try {
-      let txId: string | null = null;
-      if (values.mode === 'transfer') {
-        const to = accounts.find((a) => a.id === values.toAccountId);
-        if (!to || to.id === account.id) {
-          showToast('Pick a different destination account', 'error');
-          setSaving(false);
+      const result = await submitAddTransaction(values, {
+        accounts,
+        currency,
+        parseAmountToMinor,
+        createTransaction: (input) => createTransaction(db, input),
+        createTransfer: async (input) => {
+          const from = accounts.find((a) => a.id === input.fromAccountId);
+          const to = accounts.find((a) => a.id === input.toAccountId);
+          if (!from || !to) {
+            throw new Error('Pick a different destination account');
+          }
+          await createTransfer(db, {
+            fromAccountId: input.fromAccountId,
+            toAccountId: input.toAccountId,
+            ...(from.currencyCode === to.currencyCode
+              ? { amountMinor: input.amountMinor }
+              : {
+                  amount: fromMinorUnits(input.amountMinor, from.currencyCode),
+                }),
+            fromCurrency: from.currencyCode,
+            toCurrency: to.currencyCode,
+            title: input.title,
+            note: input.note,
+          });
+        },
+      });
+
+      if (!result.ok) {
+        if (result.error.type === 'field') {
+          setError(result.error.field, { message: result.error.message });
+          focusField(result.error.field);
           return;
         }
-        await createTransfer(db, {
-          fromAccountId: account.id,
-          toAccountId: to.id,
-          ...(account.currencyCode === to.currencyCode
-            ? { amountMinor }
-            : { amount: fromMinorUnits(amountMinor, currency) }),
-          fromCurrency: account.currencyCode,
-          toCurrency: to.currencyCode,
-          title: values.title.trim() || 'Transfer',
-          note: values.note,
-        });
-      } else {
-        txId = await createTransaction(db, {
-          accountId: account.id,
-          categoryId: values.categoryId,
-          type: values.mode,
-          amountMinor,
-          currencyCode: account.currencyCode,
-          title: values.title.trim(),
-          note: values.note,
-          tagNames: (values.tags ?? '')
-            .split(',')
-            .map((t) => t.trim())
-            .filter(Boolean),
-        });
-        if (txId && pendingImages.length) {
-          await addAttachments(
-            db,
-            txId,
-            pendingImages.map((localPath) => ({ localPath }))
-          );
-        }
+        console.error('Add transaction failed:', result.error.message);
+        showToast(result.error.message, 'error');
+        return;
       }
+
+      if (result.transactionId && pendingImages.length) {
+        await addAttachments(
+          db,
+          result.transactionId,
+          pendingImages.map((localPath) => ({ localPath }))
+        );
+      }
+
       reset({
         mode: 'expense',
         amount: '',
@@ -192,54 +242,61 @@ export function AddTransactionSheet({ visible, onClose, onSaved }: Props) {
       showToast('Saved', 'success');
       bumpData();
       onSaved();
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      console.error('Add transaction failed:', message);
+      showToast(message, 'error');
     } finally {
       setSaving(false);
     }
-  });
+  }, onInvalid);
+
+  const saveDisabled = saveAvailability.disabled || saving;
 
   return (
-    <Modal
-      visible={visible}
-      animationType='slide'
-      presentationStyle='pageSheet'
+    <View
+      className={`flex-1 ${
+        colorScheme === 'dark' ? 'bg-surface-dark' : 'bg-surface'
+      }`}
+      style={{
+        paddingHorizontal: layout.gutter,
+        paddingTop: insets.top + 8,
+      }}
     >
-      <View
-        className={`flex-1 ${
-          colorScheme === 'dark' ? 'bg-surface-dark' : 'bg-surface'
-        }`}
-        style={{
-          paddingHorizontal: layout.gutter,
-          paddingTop: insets.top + 8,
-        }}
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 24 : 0}
       >
-        <KeyboardAvoidingView
-          style={{ flex: 1 }}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 24 : 0}
+        <View className='mb-4 flex-row items-center justify-between'>
+          <AppText size='xl' weight='bold'>
+            Add
+          </AppText>
+          <IconButton name='close-outline' onPress={onClose} />
+        </View>
+
+        <View className='mb-4 flex-row gap-2'>
+          {(['expense', 'income', 'transfer'] as const).map((m) => (
+            <View key={m} className='flex-1'>
+              <Chip
+                label={m[0].toUpperCase() + m.slice(1)}
+                active={mode === m}
+                onPress={() => setValue('mode', m)}
+              />
+            </View>
+          ))}
+        </View>
+
+        <ScrollView
+          ref={scrollRef}
+          keyboardShouldPersistTaps='handled'
+          keyboardDismissMode='on-drag'
+          contentContainerStyle={{ gap: 14, paddingBottom: 80 }}
         >
-          <View className='mb-4 flex-row items-center justify-between'>
-            <AppText size='xl' weight='bold'>
-              Add
-            </AppText>
-            <IconButton name='close-outline' onPress={onClose} />
-          </View>
-
-          <View className='mb-4 flex-row gap-2'>
-            {(['expense', 'income', 'transfer'] as const).map((m) => (
-              <View key={m} className='flex-1'>
-                <Chip
-                  label={m[0].toUpperCase() + m.slice(1)}
-                  active={mode === m}
-                  onPress={() => setValue('mode', m)}
-                />
-              </View>
-            ))}
-          </View>
-
-          <ScrollView
-            keyboardShouldPersistTaps='handled'
-            keyboardDismissMode='on-drag'
-            contentContainerStyle={{ gap: 14, paddingBottom: 80 }}
+          <View
+            onLayout={(e) =>
+              registerFieldOffset('amount', e.nativeEvent.layout.y)
+            }
           >
             <Controller
               control={control}
@@ -251,9 +308,16 @@ export function AddTransactionSheet({ visible, onClose, onSaved }: Props) {
                   onChangeText={onChange}
                   keyboardType='decimal-pad'
                   placeholder='0.00'
+                  error={errors.amount?.message}
                 />
               )}
             />
+          </View>
+          <View
+            onLayout={(e) =>
+              registerFieldOffset('title', e.nativeEvent.layout.y)
+            }
+          >
             <Controller
               control={control}
               name='title'
@@ -265,10 +329,17 @@ export function AddTransactionSheet({ visible, onClose, onSaved }: Props) {
                   placeholder={
                     mode === 'transfer' ? 'Transfer' : 'Coffee, AWS invoice…'
                   }
+                  error={errors.title?.message}
                 />
               )}
             />
+          </View>
 
+          <View
+            onLayout={(e) =>
+              registerFieldOffset('accountId', e.nativeEvent.layout.y)
+            }
+          >
             <Controller
               control={control}
               name='accountId'
@@ -281,11 +352,18 @@ export function AddTransactionSheet({ visible, onClose, onSaved }: Props) {
                     label: `${a.name} · ${a.currencyCode}`,
                     value: a.id,
                   }))}
+                  error={errors.accountId?.message}
                 />
               )}
             />
+          </View>
 
-            {mode === 'transfer' ? (
+          {mode === 'transfer' ? (
+            <View
+              onLayout={(e) =>
+                registerFieldOffset('toAccountId', e.nativeEvent.layout.y)
+              }
+            >
               <Controller
                 control={control}
                 name='toAccountId'
@@ -301,134 +379,185 @@ export function AddTransactionSheet({ visible, onClose, onSaved }: Props) {
                         value: a.id,
                       }))}
                     placeholder='Select destination'
+                    error={errors.toAccountId?.message}
                   />
                 )}
               />
-            ) : (
-              <>
-                <AppText size='sm' muted weight='medium'>
-                  Category
-                </AppText>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                  <View className='flex-row gap-2'>
-                    {categories.map((cat) => (
-                      <Pressable
-                        key={cat.id}
-                        onPress={() => setValue('categoryId', cat.id)}
-                        className={`items-center gap-1 rounded-2xl px-3 py-2 ${
-                          categoryId === cat.id
-                            ? 'bg-accent/20'
-                            : colorScheme === 'dark'
-                              ? 'bg-surface-dark-raised'
-                              : 'bg-surface-raised'
-                        }`}
-                      >
-                        <CategoryGlyph
-                          iconKey={cat.iconKey}
-                          color={cat.color}
-                          size={32}
-                        />
-                        <AppText size='xs'>{cat.name}</AppText>
-                      </Pressable>
-                    ))}
-                  </View>
-                </ScrollView>
-              </>
-            )}
+            </View>
+          ) : (
+            <>
+              <AppText size='sm' muted weight='medium'>
+                Category
+              </AppText>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                <View className='flex-row gap-2'>
+                  {categories.map((cat) => (
+                    <Pressable
+                      key={cat.id}
+                      onPress={() => setValue('categoryId', cat.id)}
+                      className={`items-center gap-1 rounded-2xl px-3 py-2 ${
+                        categoryId === cat.id
+                          ? 'bg-accent/20'
+                          : colorScheme === 'dark'
+                            ? 'bg-surface-dark-raised'
+                            : 'bg-surface-raised'
+                      }`}
+                    >
+                      <CategoryGlyph
+                        iconKey={cat.iconKey}
+                        color={cat.color}
+                        size={32}
+                      />
+                      <AppText size='xs'>{cat.name}</AppText>
+                    </Pressable>
+                  ))}
+                </View>
+              </ScrollView>
+            </>
+          )}
 
+          <Controller
+            control={control}
+            name='note'
+            render={({ field: { value, onChange } }) => (
+              <Field
+                label='Note'
+                value={value}
+                onChangeText={onChange}
+                placeholder='Optional note'
+                multiline
+              />
+            )}
+          />
+          {mode !== 'transfer' ? (
             <Controller
               control={control}
-              name='note'
+              name='tags'
               render={({ field: { value, onChange } }) => (
                 <Field
-                  label='Note'
+                  label='Tags'
                   value={value}
                   onChangeText={onChange}
-                  placeholder='Optional note'
-                  multiline
+                  placeholder='saas, aws (comma separated)'
                 />
               )}
             />
-            {mode !== 'transfer' ? (
-              <Controller
-                control={control}
-                name='tags'
-                render={({ field: { value, onChange } }) => (
-                  <Field
-                    label='Tags'
-                    value={value}
-                    onChangeText={onChange}
-                    placeholder='saas, aws (comma separated)'
+          ) : null}
+
+          {mode !== 'transfer' ? (
+            <View className='gap-2'>
+              <AppText size='sm' muted weight='medium'>
+                Receipts / bills
+              </AppText>
+              <View className='flex-row gap-2'>
+                <View className='flex-1'>
+                  <Button
+                    label='Gallery'
+                    variant='secondary'
+                    icon='images-outline'
+                    onPress={onPickReceipts}
                   />
-                )}
-              />
-            ) : null}
-
-            {mode !== 'transfer' ? (
-              <View className='gap-2'>
-                <AppText size='sm' muted weight='medium'>
-                  Receipts / bills
-                </AppText>
-                <View className='flex-row gap-2'>
-                  <View className='flex-1'>
-                    <Button
-                      label='Gallery'
-                      variant='secondary'
-                      icon='images-outline'
-                      onPress={onPickReceipts}
-                    />
-                  </View>
-                  <View className='flex-1'>
-                    <Button
-                      label='Camera'
-                      variant='secondary'
-                      icon='camera-outline'
-                      onPress={onTakeReceipt}
-                    />
-                  </View>
                 </View>
-                <Button
-                  label='Scan receipt (OCR soon)'
-                  variant='ghost'
-                  icon='scan-outline'
-                  onPress={() =>
-                    showToast(
-                      'On-device OCR is planned — attach a photo for now',
-                      'default'
-                    )
-                  }
-                />
-                {pendingImages.length ? (
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                    <View className='flex-row gap-2'>
-                      {pendingImages.map((path) => (
-                        <ReceiptThumb
-                          key={path}
-                          path={path}
-                          onPress={() =>
-                            setPendingImages((prev) =>
-                              prev.filter((p) => p !== path)
-                            )
-                          }
-                        />
-                      ))}
-                    </View>
-                  </ScrollView>
-                ) : (
-                  <AppText size='xs' muted>
-                    Multiple images per expense — stored on this device
-                  </AppText>
-                )}
+                <View className='flex-1'>
+                  <Button
+                    label='Camera'
+                    variant='secondary'
+                    icon='camera-outline'
+                    onPress={onTakeReceipt}
+                  />
+                </View>
               </View>
-            ) : null}
+              <Button
+                label='Scan receipt (OCR soon)'
+                variant='ghost'
+                icon='scan-outline'
+                onPress={() =>
+                  showToast(
+                    'On-device OCR is planned — attach a photo for now',
+                    'default'
+                  )
+                }
+              />
+              {pendingImages.length ? (
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  <View className='flex-row gap-2'>
+                    {pendingImages.map((path) => (
+                      <ReceiptThumb
+                        key={path}
+                        path={path}
+                        onPress={() =>
+                          setPendingImages((prev) =>
+                            prev.filter((p) => p !== path)
+                          )
+                        }
+                      />
+                    ))}
+                  </View>
+                </ScrollView>
+              ) : (
+                <AppText size='xs' muted>
+                  Multiple images per expense — stored on this device
+                </AppText>
+              )}
+            </View>
+          ) : null}
 
-            <AppText size='xs' muted>
-              Currency: {currency}
+          <AppText size='xs' muted>
+            Currency: {currency}
+          </AppText>
+
+          {saveAvailability.disabled &&
+          saveAvailability.reason === 'no_accounts' ? (
+            <View className='gap-1'>
+              <AppText size='sm' style={{ color: c.expense }}>
+                {saveAvailability.message}
+              </AppText>
+              <Pressable
+                onPress={() => {
+                  onClose();
+                  router.push('/(tabs)/accounts' as Href);
+                }}
+              >
+                <AppText size='sm' style={{ color: c.accent }}>
+                  Add an account
+                </AppText>
+              </Pressable>
+            </View>
+          ) : null}
+
+          {saveAvailability.disabled &&
+          saveAvailability.reason === 'loading' ? (
+            <AppText size='sm' muted>
+              Loading accounts…
             </AppText>
-            <Button label='Save' onPress={save} loading={saving} />
-          </ScrollView>
-        </KeyboardAvoidingView>
-      </View>
+          ) : null}
+
+          <Button
+            label='Save'
+            onPress={save}
+            loading={saving}
+            disabled={saveDisabled}
+          />
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </View>
+  );
+}
+
+export function AddTransactionSheet({ visible, onClose, onSaved }: Props) {
+  return (
+    <Modal
+      visible={visible}
+      animationType='slide'
+      presentationStyle='pageSheet'
+    >
+      <ModalToastProvider>
+        <AddTransactionSheetBody
+          visible={visible}
+          onClose={onClose}
+          onSaved={onSaved}
+        />
+      </ModalToastProvider>
     </Modal>
   );
 }
