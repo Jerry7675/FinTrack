@@ -1,5 +1,11 @@
 import { palette } from '@/constants/palette';
-import { contrastRatio, ensureContrast, withAlpha } from '@/lib/color';
+import {
+  contrastRatio,
+  ensureContrast,
+  isHexColor,
+  safeCategoryHex,
+  withAlpha,
+} from '@/lib/color';
 
 const DARK_CARD = palette.dark.surfaceRaised;
 const LIGHT_CARD = palette.light.surfaceRaised;
@@ -340,6 +346,30 @@ describe('withAlpha', () => {
 
   it('throws when hex digits are not valid', () => {
     expect(() => withAlpha('#GGGGGG', '22')).toThrow(/0-9 or A-F/);
+  });
+});
+
+describe('safeCategoryHex', () => {
+  const fallback = '#6B7280';
+
+  it.each([
+    ['', fallback],
+    ['rgb(10,20,30)', fallback],
+    ['transparent', fallback],
+    ['#12345', fallback],
+    [undefined, fallback],
+  ] as const)('returns fallback for %s', (input, expected) => {
+    expect(safeCategoryHex(input)).toBe(expected);
+  });
+
+  it('passes valid hex through', () => {
+    expect(safeCategoryHex('#6A4C93')).toBe('#6A4C93');
+    expect(safeCategoryHex('ABC')).toBe('#ABC');
+  });
+
+  it('isHexColor matches safeCategoryHex acceptance', () => {
+    expect(isHexColor('#FF5733')).toBe(true);
+    expect(isHexColor('#12345')).toBe(false);
   });
 });
 

@@ -251,6 +251,28 @@ function hslToRgb(hsl: { h: number; s: number; l: number }): {
 
 const HEX_COLOR_BODY = /^[0-9A-Fa-f]+$/;
 
+const VALID_HEX_LENGTHS = new Set([3, 6, 8]);
+
+/** True for #RGB, #RRGGBB, #RRGGBBAA (optional `#` prefix). */
+export function isHexColor(value: string | undefined | null): value is string {
+  if (value == null || typeof value !== 'string') return false;
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+  const clean = trimmed.replace(/^#/, '');
+  if (!VALID_HEX_LENGTHS.has(clean.length)) return false;
+  return HEX_COLOR_BODY.test(clean);
+}
+
+/** Returns a usable hex for category UI, or `fallback` when input is not valid hex. */
+export function safeCategoryHex(
+  color: string | undefined | null,
+  fallback = '#6B7280'
+): string {
+  if (!isHexColor(color)) return fallback;
+  const trimmed = color.trim();
+  return trimmed.startsWith('#') ? trimmed : `#${trimmed}`;
+}
+
 function assertValidHexColorBody(clean: string, original: string): void {
   if (!HEX_COLOR_BODY.test(clean)) {
     throw new Error(
