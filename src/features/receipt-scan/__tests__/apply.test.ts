@@ -111,6 +111,9 @@ describe('applyScanToForm', () => {
     expect(r.patch.amount).toBeUndefined();
     expect(r.currencyMismatch?.alternateAccount?.id).toBe('a2');
     expect(r.currencyMismatch?.scannedAmount).toBe('10.00');
+    expect(
+      r.skippedNotes.some((n) => n.includes("wasn't a valid amount"))
+    ).toBe(false);
   });
 
   it('rejects future and invalid dates', () => {

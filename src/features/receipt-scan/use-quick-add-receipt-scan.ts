@@ -125,7 +125,7 @@ export function useQuickAddReceiptScan({
       setSuccessBanner(null);
       setErrorBanner(kind);
       setErrorScope(scope);
-      if (retry != null) setRetryAfterSec(retry);
+      setRetryAfterSec(retry ?? null);
     },
     []
   );
@@ -142,7 +142,16 @@ export function useQuickAddReceiptScan({
       abortRef.current = controller;
 
       try {
-        const prepared = await prepareReceiptForUpload(receiptPath);
+        let prepared: Awaited<ReturnType<typeof prepareReceiptForUpload>>;
+        try {
+          prepared = await prepareReceiptForUpload(receiptPath);
+        } catch (prepErr) {
+          console.error('prepareReceiptForUpload failed', prepErr);
+          await cleanupUpload();
+          showError('photo_open');
+          setScanning(false);
+          return;
+        }
         uploadPathRef.current = prepared.cachePath;
         setScanPhase('reading');
         AccessibilityInfo.announceForAccessibility('Reading receipt');
@@ -156,11 +165,7 @@ export function useQuickAddReceiptScan({
             return;
           }
           if (response.error === 'rate_limited') {
-            showError(
-              'rate_limited',
-              response.scope,
-              response.retryAfterSec ?? 60
-            );
+            showError('rate_limited', response.scope, response.retryAfterSec);
             setScanning(false);
             return;
           }
@@ -194,7 +199,10 @@ export function useQuickAddReceiptScan({
       } catch (e) {
         console.error('Receipt scan failed', e);
         await cleanupUpload();
-        showError('photo_open');
+        showToast(
+          'Something went wrong with scanning. Enter the details yourself.',
+          'error'
+        );
         setScanning(false);
       }
     },
@@ -205,6 +213,7 @@ export function useQuickAddReceiptScan({
       onApplyResult,
       onFocusAmount,
       showError,
+      showToast,
     ]
   );
 
@@ -371,7 +380,7 @@ export function useQuickAddReceiptScan({
   const requestCloseInterrupt = useCallback(async (): Promise<boolean> => {
     if (!scanning) return false;
     await cancelScan();
-    return true;
+    return false;
   }, [cancelScan, scanning]);
 
   const retryLabel =

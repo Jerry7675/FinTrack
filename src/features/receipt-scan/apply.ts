@@ -193,10 +193,6 @@ export function applyScanToForm(
 
   if (!ctx.userTouched.amount && rawAmount) {
     if (currencyMismatch) {
-      skippedNotes.push(
-        skipNoteForField('amount', 'currency_mismatch', false) ??
-          "Amount not filled: it wasn't a valid amount."
-      );
       const alternate = ctx.accounts.find(
         (a) => a.currencyCode === receiptCurrency
       );

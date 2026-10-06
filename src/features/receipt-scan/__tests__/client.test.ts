@@ -41,6 +41,26 @@ describe('scanReceipt', () => {
     expect(body.image).toEqual({ mime: 'image/jpeg', base64: 'abc123' });
   });
 
+  it('maps 429 without retryAfterSec', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: false,
+      status: 429,
+      headers: { get: () => null },
+      json: async () => ({
+        error: 'rate_limited',
+        scope: 'provider',
+      }),
+    }) as typeof fetch;
+
+    const res = await scanReceipt('x');
+    expect(res).toEqual({
+      ok: false,
+      error: 'rate_limited',
+      scope: 'provider',
+      retryAfterSec: undefined,
+    });
+  });
+
   it('maps 429 ip scope', async () => {
     global.fetch = jest.fn().mockResolvedValue({
       ok: false,

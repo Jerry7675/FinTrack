@@ -214,6 +214,8 @@ function AddTransactionSheetBody({
   const prevModeRef = useRef<FormValues['mode']>('expense');
   const userPickedAccountRef = useRef(false);
   const userPickedCategoryRef = useRef(false);
+  const titleUserEditedRef = useRef(false);
+  const dateUserChangedRef = useRef(false);
   const userPickedToAccountRef = useRef(false);
   const categorySelectGenerationRef = useRef(0);
   const savingRef = useRef(false);
@@ -374,6 +376,8 @@ function AddTransactionSheetBody({
       const today = defaultTransactionDateString();
       userPickedAccountRef.current = false;
       userPickedCategoryRef.current = false;
+      titleUserEditedRef.current = false;
+      dateUserChangedRef.current = false;
       openedDateRef.current = today;
       setSaveAttempted(false);
       setAmountTouched(false);
@@ -474,6 +478,23 @@ function AddTransactionSheetBody({
     [accounts, mode, setValue]
   );
 
+  const applyAiCategory = useCallback(
+    (id: string) => {
+      setValue('categoryId', id);
+      if (mode === 'transfer') return;
+      void (async () => {
+        try {
+          const row = await getLastEntryForCategory(db, id);
+          setLastCategoryTitle(row?.title ?? null);
+        } catch (e) {
+          console.error('getLastEntryForCategory failed', e);
+          setLastCategoryTitle(null);
+        }
+      })();
+    },
+    [mode, setValue]
+  );
+
   const requestModeChange = useCallback(
     (next: FormValues['mode']) => {
       if (next === mode) return;
@@ -530,9 +551,9 @@ function AddTransactionSheetBody({
       })),
       today: defaultTransactionDateString(),
       userTouched: {
-        amount: amountTouched || values.amount.trim() !== '',
-        title: values.title.trim() !== '',
-        date: values.date !== openedDateRef.current,
+        amount: amountTouched,
+        title: titleUserEditedRef.current,
+        date: dateUserChangedRef.current,
         category: userPickedCategoryRef.current,
       },
     };
@@ -569,7 +590,7 @@ function AddTransactionSheetBody({
         result.patch.categoryId != null &&
         (nextAi.has('categoryId') || !userPickedCategoryRef.current)
       ) {
-        void selectCategory(result.patch.categoryId);
+        applyAiCategory(result.patch.categoryId);
         nextAi.add('categoryId');
       }
       if (result.currencyMismatch) {
@@ -577,7 +598,7 @@ function AddTransactionSheetBody({
       }
       setAiFilled(nextAi);
     },
-    [aiFilled, getValues, selectCategory, setValue]
+    [aiFilled, applyAiCategory, getValues, setValue]
   );
 
   const clearAiField = useCallback((field: AiFilledField) => {
@@ -956,14 +977,12 @@ function AddTransactionSheetBody({
                 : 'Asks before turning on receipt scanning.'
             }
             accessibilityState={{ disabled: receiptScan.scanning }}
-            className='min-h-[44px] min-w-[44px] items-center justify-center'
+            className='min-h-[44px] min-w-[44px] flex-row items-center justify-center gap-1 rounded-full px-2'
           >
-            <Button
-              label='Scan'
-              variant='ghost'
-              icon='scan-outline'
-              disabled={receiptScan.scanning}
-            />
+            <Ionicons name='scan-outline' size={scale(18)} color={c.ink} />
+            <AppText size='sm' weight='semibold'>
+              Scan
+            </AppText>
           </Pressable>
         ) : (
           <View style={{ width: scale(44) }} />
@@ -1351,6 +1370,7 @@ function AddTransactionSheetBody({
                           new Date()
                         )}
                         onPress={() => {
+                          dateUserChangedRef.current = true;
                           clearAiField('date');
                           setDatePickerOpen(true);
                         }}
@@ -1374,6 +1394,7 @@ function AddTransactionSheetBody({
                               ref={ref}
                               value={value}
                               onChangeText={(t) => {
+                                titleUserEditedRef.current = true;
                                 clearAiField('title');
                                 onChange(t);
                               }}
@@ -1552,6 +1573,7 @@ function AddTransactionSheetBody({
         now={new Date()}
         onClose={() => setDatePickerOpen(false)}
         onChange={(d) => {
+          dateUserChangedRef.current = true;
           clearAiField('date');
           setValue('date', d);
         }}

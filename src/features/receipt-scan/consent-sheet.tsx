@@ -41,20 +41,20 @@ export function ReceiptScanConsentSheet({
           <AppText size='lg' weight='bold' className='mb-3'>
             Scan receipts with AI?
           </AppText>
-          <AppText size='sm' secondary className='mb-3'>
+          <AppText size='base' secondary className='mb-3'>
             To read a receipt, FinTrack sends the photo over the internet
             through FinTrack&apos;s server to OpenRouter, a third-party AI
             service. It reads the amount, date, merchant and similar details and
             sends them back to fill in the form.
           </AppText>
-          <AppText size='sm' secondary className='mb-3'>
+          <AppText size='base' secondary className='mb-3'>
             Free AI models may keep what they receive. Only the receipt photo is
             sent. Like any web request, it carries your IP address, which
             FinTrack&apos;s server uses briefly to limit abuse and does not
             keep. Nothing else from your phone is sent: not your accounts,
             balances or other transactions.
           </AppText>
-          <AppText size='sm' secondary className='mb-5'>
+          <AppText size='base' secondary className='mb-5'>
             Scanning only happens when you tap Scan. You check everything before
             saving, and you can turn scanning off anytime in Settings.
           </AppText>
