@@ -30,7 +30,7 @@ export const RAW_FIELD_CAPS = {
   categoryHint: 32,
 } as const;
 
-export const MERCHANT_MAX_CHARS = 9999;
+export const MERCHANT_MAX_CHARS = 120;
 
 export const ALLOWED_CATEGORY_HINTS = [
   'food',

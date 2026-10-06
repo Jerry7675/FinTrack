@@ -25,7 +25,10 @@ function stripControlChars(value: string): string {
   return value.replace(CONTROL_AND_BIDI, '');
 }
 
-function capRaw(value: string | null | undefined, max: number): string | null {
+export function capRaw(
+  value: string | null | undefined,
+  max: number
+): string | null {
   if (value == null) {
     return null;
   }

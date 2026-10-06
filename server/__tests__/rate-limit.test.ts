@@ -24,6 +24,7 @@ describe('resolveClientIp', () => {
       'x-forwarded-for': '9.9.9.9, 203.0.113.5',
     });
     expect(resolveClientIp(headers)).toBe('203.0.113.5');
+    expect(resolveClientIp(headers)).not.toBe('9.9.9.9');
   });
 });
 
