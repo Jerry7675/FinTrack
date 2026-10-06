@@ -178,6 +178,10 @@ function AddTransactionSheetBody({
   const [moreDetailsOpen, setMoreDetailsOpen] = useState(false);
   const [datePickerOpen, setDatePickerOpen] = useState(false);
   const [discardOpen, setDiscardOpen] = useState(false);
+  const [transferReceiptsOpen, setTransferReceiptsOpen] = useState(false);
+  const [pendingMode, setPendingMode] = useState<FormValues['mode'] | null>(
+    null
+  );
   const [allCategoriesOpen, setAllCategoriesOpen] = useState(false);
   const [accountPickerOpen, setAccountPickerOpen] = useState(false);
   const [amountBlocked, setAmountBlocked] = useState(false);
@@ -189,6 +193,8 @@ function AddTransactionSheetBody({
   const prevModeRef = useRef<FormValues['mode']>('expense');
   const userPickedAccountRef = useRef(false);
   const userPickedCategoryRef = useRef(false);
+  const userPickedToAccountRef = useRef(false);
+  const categorySelectGenerationRef = useRef(0);
   const savingRef = useRef(false);
 
   const {
@@ -260,6 +266,13 @@ function AddTransactionSheetBody({
       if (reason === 'open') {
         setContinueWithoutCategory(false);
       }
+      if (reason === 'mode') {
+        setCategories([]);
+        setOrderedCategories([]);
+        setLastCategoryTitle(null);
+        userPickedCategoryRef.current = false;
+        userPickedToAccountRef.current = false;
+      }
       try {
         const kind =
           mode === 'transfer'
@@ -282,6 +295,16 @@ function AddTransactionSheetBody({
 
         if (reason === 'open' || reason === 'mode') {
           setValue('categoryId', defaultCat);
+          if (defaultCat && mode !== 'transfer') {
+            try {
+              const row = await getLastEntryForCategory(db, defaultCat);
+              setLastCategoryTitle(row?.title ?? null);
+            } catch {
+              setLastCategoryTitle(null);
+            }
+          } else {
+            setLastCategoryTitle(null);
+          }
         }
 
         if (
@@ -292,7 +315,7 @@ function AddTransactionSheetBody({
           const nextAccount = resolveQuickAddAccountId(
             accounts,
             settings?.activeAccountId,
-            reason === 'open' ? preferredAccount : null
+            preferredAccount
           );
           setValue('accountId', nextAccount);
 
@@ -342,18 +365,9 @@ function AddTransactionSheetBody({
   useEffect(() => {
     if (!visible || !ready) return;
     if (prevModeRef.current === mode) return;
-    const previous = prevModeRef.current;
     prevModeRef.current = mode;
-    if (
-      previous !== 'transfer' &&
-      mode === 'transfer' &&
-      pendingImages.length
-    ) {
-      void Promise.all(pendingImages.map((path) => deleteLocalImage(path)));
-      setPendingImages([]);
-    }
     void loadContext('mode');
-  }, [mode, visible, ready, loadContext, pendingImages]);
+  }, [mode, visible, ready, loadContext]);
 
   useEffect(() => {
     if (!accountId || !visible) return;
@@ -385,26 +399,69 @@ function AddTransactionSheetBody({
       pendingImageCount: pendingImages.length,
       userPickedAccount: userPickedAccountRef.current,
       userPickedCategory: userPickedCategoryRef.current,
+      userPickedToAccount: userPickedToAccountRef.current,
     });
   }, [getValues, pendingImages]);
 
+  const resetDirtyBaseline = useCallback(() => {
+    openedDateRef.current = getValues('date');
+    userPickedAccountRef.current = false;
+    userPickedCategoryRef.current = false;
+    userPickedToAccountRef.current = false;
+  }, [getValues]);
+
   const selectCategory = useCallback(
     async (id: string) => {
+      const requestId = ++categorySelectGenerationRef.current;
       userPickedCategoryRef.current = true;
       setValue('categoryId', id);
       if (mode === 'transfer') return;
-      const row = await getLastEntryForCategory(db, id);
-      setLastCategoryTitle(row?.title ?? null);
-      if (
-        row?.accountId &&
-        !userPickedAccountRef.current &&
-        accounts.some((a) => a.id === row.accountId)
-      ) {
-        setValue('accountId', row.accountId);
+      try {
+        const row = await getLastEntryForCategory(db, id);
+        if (requestId !== categorySelectGenerationRef.current) return;
+        setLastCategoryTitle(row?.title ?? null);
+        if (
+          row?.accountId &&
+          !userPickedAccountRef.current &&
+          accounts.some((a) => a.id === row.accountId)
+        ) {
+          setValue('accountId', row.accountId);
+        }
+      } catch (e) {
+        console.error('getLastEntryForCategory failed', e);
+        if (requestId !== categorySelectGenerationRef.current) return;
+        setLastCategoryTitle(null);
       }
     },
     [accounts, mode, setValue]
   );
+
+  const requestModeChange = useCallback(
+    (next: FormValues['mode']) => {
+      if (next === mode) return;
+      if (
+        next === 'transfer' &&
+        mode !== 'transfer' &&
+        pendingImages.length > 0
+      ) {
+        setPendingMode(next);
+        setTransferReceiptsOpen(true);
+        return;
+      }
+      setValue('mode', next);
+    },
+    [mode, pendingImages.length, setValue]
+  );
+
+  const confirmTransferWithoutReceipts = useCallback(async () => {
+    setTransferReceiptsOpen(false);
+    const next = pendingMode;
+    setPendingMode(null);
+    if (!next) return;
+    await Promise.all(pendingImages.map((path) => deleteLocalImage(path)));
+    setPendingImages([]);
+    setValue('mode', next);
+  }, [pendingImages, pendingMode, setValue]);
 
   const requestClose = useCallback(() => {
     if (isDirty()) {
@@ -554,13 +611,14 @@ function AddTransactionSheetBody({
           return;
         }
 
+        const imagesToAttach = [...pendingImages];
         let attachmentsFailed = false;
-        if (result.transactionId && pendingImages.length) {
+        if (result.transactionId && imagesToAttach.length) {
           try {
             await addAttachments(
               db,
               result.transactionId,
-              pendingImages.map((localPath) => ({ localPath }))
+              imagesToAttach.map((localPath) => ({ localPath }))
             );
           } catch (attachError) {
             console.error('Add attachments failed:', attachError);
@@ -568,8 +626,14 @@ function AddTransactionSheetBody({
           }
         }
 
+        const attachmentMessage = 'Saved, but receipts could not be attached.';
         if (attachmentsFailed) {
-          showToast('Saved, but receipts could not be attached.', 'error');
+          if (closingAfter) {
+            showRootToast(attachmentMessage, 'error');
+            await Promise.all(imagesToAttach.map((p) => deleteLocalImage(p)));
+          } else {
+            showToast(attachmentMessage, 'error');
+          }
         } else {
           showRootToast('Saved', 'success');
         }
@@ -602,6 +666,7 @@ function AddTransactionSheetBody({
         }
 
         finishSuccess(true);
+        resetDirtyBaseline();
         const refreshedLast = await getLastEntry(db, mode);
         setLastEntry(refreshedLast);
       } catch (e) {
@@ -629,6 +694,7 @@ function AddTransactionSheetBody({
       onSaved,
       onClose,
       setValue,
+      resetDirtyBaseline,
     ]
   );
 
@@ -750,7 +816,7 @@ function AddTransactionSheetBody({
             <SegmentedControl
               options={segmentedOptions}
               value={mode}
-              onChange={(v) => setValue('mode', v as FormValues['mode'])}
+              onChange={(v) => requestModeChange(v as FormValues['mode'])}
             />
           </View>
 
@@ -965,7 +1031,10 @@ function AddTransactionSheetBody({
                         <Select
                           label='To account'
                           value={value}
-                          onChange={onChange}
+                          onChange={(v) => {
+                            userPickedToAccountRef.current = true;
+                            onChange(v);
+                          }}
                           options={accounts
                             .filter((a) => a.id !== accountId)
                             .map((a) => ({
@@ -1248,22 +1317,33 @@ function AddTransactionSheetBody({
             <FlatList
               data={accounts}
               keyExtractor={(item) => item.id}
-              renderItem={({ item }) => (
-                <Pressable
-                  onPress={() => {
-                    userPickedAccountRef.current = true;
-                    setValue('accountId', item.id);
-                    setAccountPickerOpen(false);
-                  }}
-                  accessibilityRole='button'
-                  className='py-3.5'
-                  style={{ minHeight: Math.max(44, scale(44)) }}
-                >
-                  <AppText>
-                    {item.name} · {item.currencyCode}
-                  </AppText>
-                </Pressable>
-              )}
+              renderItem={({ item }) => {
+                const selected = item.id === accountId;
+                return (
+                  <Pressable
+                    onPress={() => {
+                      userPickedAccountRef.current = true;
+                      setValue('accountId', item.id);
+                      setAccountPickerOpen(false);
+                    }}
+                    accessibilityRole='button'
+                    accessibilityState={{ selected }}
+                    className='flex-row items-center justify-between py-3.5'
+                    style={{ minHeight: Math.max(44, scale(44)) }}
+                  >
+                    <AppText>
+                      {item.name} · {item.currencyCode}
+                    </AppText>
+                    {selected ? (
+                      <Ionicons
+                        name='checkmark'
+                        size={scale(20)}
+                        color={c.accent}
+                      />
+                    ) : null}
+                  </Pressable>
+                );
+              }}
             />
           </Pressable>
         </Pressable>
@@ -1285,28 +1365,53 @@ function AddTransactionSheetBody({
             <FlatList
               data={categories}
               keyExtractor={(item) => item.id}
-              renderItem={({ item }) => (
-                <Pressable
-                  onPress={() => {
-                    void selectCategory(item.id);
-                    setAllCategoriesOpen(false);
-                  }}
-                  accessibilityRole='button'
-                  className='flex-row items-center gap-3 py-3.5'
-                  style={{ minHeight: Math.max(44, scale(44)) }}
-                >
-                  <CategoryGlyph
-                    iconKey={item.iconKey}
-                    color={item.color}
-                    size={32}
-                  />
-                  <AppText>{item.name}</AppText>
-                </Pressable>
-              )}
+              renderItem={({ item }) => {
+                const selected = item.id === categoryId;
+                return (
+                  <Pressable
+                    onPress={() => {
+                      void selectCategory(item.id);
+                      setAllCategoriesOpen(false);
+                    }}
+                    accessibilityRole='button'
+                    accessibilityState={{ selected }}
+                    className='flex-row items-center gap-3 py-3.5'
+                    style={{ minHeight: Math.max(44, scale(44)) }}
+                  >
+                    <CategoryGlyph
+                      iconKey={item.iconKey}
+                      color={item.color}
+                      size={32}
+                    />
+                    <AppText className='flex-1'>{item.name}</AppText>
+                    {selected ? (
+                      <Ionicons
+                        name='checkmark'
+                        size={scale(20)}
+                        color={c.accent}
+                      />
+                    ) : null}
+                  </Pressable>
+                );
+              }}
             />
           </Pressable>
         </Pressable>
       </Modal>
+
+      <ConfirmDialog
+        visible={transferReceiptsOpen}
+        title='Remove receipts?'
+        message={`Remove ${pendingImages.length} receipt${
+          pendingImages.length === 1 ? '' : 's'
+        }? Transfers can't have receipts.`}
+        confirmLabel='Remove'
+        onConfirm={() => void confirmTransferWithoutReceipts()}
+        onCancel={() => {
+          setTransferReceiptsOpen(false);
+          setPendingMode(null);
+        }}
+      />
 
       <ConfirmDialog
         visible={discardOpen}
