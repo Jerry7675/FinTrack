@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/primitives';
 import { useToast } from '@/components/ui/toast';
 import { characters } from '@/constants/characters';
+import { ReceiptScanSettingsRow } from '@/features/receipt-scan/settings-row';
 import { updateWidgetSnapshot } from '@/features/widgets/update';
 import {
   exportBackupJson,
@@ -485,6 +486,7 @@ export function SettingsScreen() {
         />
 
         <SectionHeader title='Data & privacy' />
+        <ReceiptScanSettingsRow />
         <ListRow
           title='Export backup (JSON)'
           subtitle='Portable dump for cloud / Drive later'
