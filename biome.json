@@ -6,6 +6,7 @@
       "!!node_modules",
       "!!.expo",
       "!!dist",
+      "!!dist-android",
       "!!build",
       "!!graphify-out",
       "!!assets/expo.icon/Assets"

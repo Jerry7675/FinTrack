@@ -1,0 +1,13 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "target": "ES2022",
+    "noEmit": true,
+    "skipLibCheck": true,
+    "types": ["node"]
+  },
+  "include": ["./api/**/*.ts", "./lib/**/*.ts", "./config.ts"],
+  "exclude": ["node_modules", "**/__tests__/**"]
+}
