@@ -1355,11 +1355,14 @@ function AddTransactionSheetBody({
                           setDatePickerOpen(true);
                         }}
                         right={
-                          <Ionicons
-                            name='chevron-forward'
-                            size={scale(18)}
-                            color={c.inkMuted}
-                          />
+                          <View className='flex-row items-center gap-2'>
+                            {aiFilled.has('date') ? <AiFilledBadge /> : null}
+                            <Ionicons
+                              name='chevron-forward'
+                              size={scale(18)}
+                              color={c.inkMuted}
+                            />
+                          </View>
                         }
                       />
                       <View className='px-4 py-2'>
