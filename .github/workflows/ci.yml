@@ -38,4 +38,6 @@ jobs:
         run: TZ=UTC bun run test
 
       - name: Bundle secret scan
-        run: bun run check-secrets
+        run: |
+          bash scripts/check-no-secrets.sh --self-test
+          bun run check-secrets
