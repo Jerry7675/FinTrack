@@ -1,4 +1,10 @@
-import { startOfDay, startOfMonth, startOfWeek, startOfYear } from 'date-fns';
+import {
+  startOfDay,
+  startOfMonth,
+  startOfWeek,
+  startOfYear,
+  subDays,
+} from 'date-fns';
 import {
   and,
   desc,
@@ -175,6 +181,120 @@ export async function listCategories(
     .from(categories)
     .where(and(...conditions))
     .orderBy(categories.sortOrder, categories.name);
+}
+
+export type CategoryUsageRow = {
+  categoryId: string;
+  count: number;
+  lastUsedAt: Date | null;
+};
+
+export async function listCategoryUsage(
+  database: AppDatabase,
+  kind: 'expense' | 'income',
+  sinceDays = 90,
+  now: Date = new Date()
+): Promise<CategoryUsageRow[]> {
+  const since = subDays(startOfDay(now), sinceDays);
+  const rows = await database
+    .select({
+      categoryId: transactions.categoryId,
+      count: sql<number>`count(*)`,
+      lastUsedAt: sql<number>`max(${transactions.occurredAt})`,
+    })
+    .from(transactions)
+    .where(
+      and(
+        isNull(transactions.deletedAt),
+        eq(transactions.type, kind),
+        isNotNull(transactions.categoryId),
+        gte(transactions.occurredAt, since)
+      )
+    )
+    .groupBy(transactions.categoryId);
+
+  return rows
+    .filter((row) => row.categoryId != null)
+    .map((row) => ({
+      categoryId: row.categoryId as string,
+      count: Number(row.count),
+      lastUsedAt: row.lastUsedAt ? new Date(Number(row.lastUsedAt)) : null,
+    }));
+}
+
+export type LastEntryRow = {
+  accountId: string;
+  categoryId: string | null;
+  title: string;
+  amountMinor: number;
+  currencyCode: string;
+  occurredAt: Date;
+};
+
+export async function getLastEntry(
+  database: AppDatabase,
+  type: 'expense' | 'income' | 'transfer',
+  _now: Date = new Date()
+): Promise<LastEntryRow | null> {
+  const rows = await database
+    .select({
+      accountId: transactions.accountId,
+      categoryId: transactions.categoryId,
+      title: transactions.title,
+      amountMinor: transactions.amountMinor,
+      currencyCode: transactions.currencyCode,
+      occurredAt: transactions.occurredAt,
+    })
+    .from(transactions)
+    .where(and(isNull(transactions.deletedAt), eq(transactions.type, type)))
+    .orderBy(desc(transactions.occurredAt))
+    .limit(1);
+
+  const row = rows[0];
+  if (!row) return null;
+  return {
+    accountId: row.accountId,
+    categoryId: row.categoryId,
+    title: row.title,
+    amountMinor: row.amountMinor,
+    currencyCode: row.currencyCode,
+    occurredAt: row.occurredAt,
+  };
+}
+
+export async function getLastEntryForCategory(
+  database: AppDatabase,
+  categoryId: string
+): Promise<LastEntryRow | null> {
+  const rows = await database
+    .select({
+      accountId: transactions.accountId,
+      categoryId: transactions.categoryId,
+      title: transactions.title,
+      amountMinor: transactions.amountMinor,
+      currencyCode: transactions.currencyCode,
+      occurredAt: transactions.occurredAt,
+    })
+    .from(transactions)
+    .where(
+      and(
+        isNull(transactions.deletedAt),
+        eq(transactions.categoryId, categoryId)
+      )
+    )
+    .orderBy(desc(transactions.occurredAt))
+    .limit(1);
+
+  const row = rows[0];
+  if (!row) return null;
+  return {
+    accountId: row.accountId,
+    categoryId: row.categoryId,
+    title: row.title,
+    amountMinor: row.amountMinor,
+    currencyCode: row.currencyCode,
+    occurredAt: row.occurredAt,
+  };
 }
 
 export type TransactionFilters = {
