@@ -1,4 +1,6 @@
+import { ZodError } from 'zod';
 import type { parseAmountToMinor } from '@/lib/money';
+import { TRANSACTION_LIMITS } from '@/lib/validation';
 
 export type AddTransactionMode = 'expense' | 'income' | 'transfer';
 
@@ -17,13 +19,17 @@ export type AddTransactionField =
   | 'amount'
   | 'title'
   | 'accountId'
-  | 'toAccountId';
+  | 'toAccountId'
+  | 'note'
+  | 'tags';
 
 export const ADD_TRANSACTION_FIELD_ORDER: AddTransactionField[] = [
   'amount',
   'title',
   'accountId',
   'toAccountId',
+  'note',
+  'tags',
 ];
 
 export type SubmitAddTransactionError =
@@ -65,6 +71,19 @@ export type SubmitAddTransactionResult =
   | { ok: true; transactionId?: string }
   | { ok: false; error: SubmitAddTransactionError };
 
+export function resolveDefaultAccountId(
+  accounts: AccountSummary[],
+  activeAccountId?: string | null
+): string {
+  if (
+    activeAccountId &&
+    accounts.some((account) => account.id === activeAccountId)
+  ) {
+    return activeAccountId;
+  }
+  return accounts[0]?.id ?? '';
+}
+
 export function getAddTransactionSaveAvailability(
   accountsReady: boolean,
   accountCount: number
@@ -83,6 +102,13 @@ export function getAddTransactionSaveAvailability(
     };
   }
   return { disabled: false };
+}
+
+function parseTagNames(tags: string | undefined): string[] {
+  return (tags ?? '')
+    .split(',')
+    .map((t) => t.trim())
+    .filter(Boolean);
 }
 
 export function validateAddTransactionInput(
@@ -116,6 +142,31 @@ export function validateAddTransactionInput(
     };
   }
 
+  if (values.title.length > TRANSACTION_LIMITS.titleMax) {
+    return {
+      type: 'field',
+      field: 'title',
+      message: `Title must be ${TRANSACTION_LIMITS.titleMax} characters or fewer`,
+    };
+  }
+
+  if ((values.note?.length ?? 0) > TRANSACTION_LIMITS.noteMax) {
+    return {
+      type: 'field',
+      field: 'note',
+      message: `Note must be ${TRANSACTION_LIMITS.noteMax} characters or fewer`,
+    };
+  }
+
+  const tagNames = parseTagNames(values.tags);
+  if (tagNames.some((tag) => tag.length > TRANSACTION_LIMITS.tagMax)) {
+    return {
+      type: 'field',
+      field: 'tags',
+      message: `Each tag must be ${TRANSACTION_LIMITS.tagMax} characters or fewer`,
+    };
+  }
+
   if (values.mode !== 'transfer' && !values.title.trim()) {
     return {
       type: 'field',
@@ -145,6 +196,33 @@ export function firstAddTransactionFieldWithError(
     if (errors[field]?.message) return field;
   }
   return null;
+}
+
+function errorFromThrown(e: unknown): SubmitAddTransactionError {
+  if (e instanceof ZodError) {
+    const issue = e.issues[0];
+    const pathKey = issue?.path[0];
+    const message = issue?.message ?? 'Invalid transaction';
+    if (pathKey === 'title') {
+      return { type: 'field', field: 'title', message };
+    }
+    if (pathKey === 'note') {
+      return { type: 'field', field: 'note', message };
+    }
+    if (pathKey === 'tagNames' || pathKey === 'tags') {
+      return { type: 'field', field: 'tags', message };
+    }
+    if (pathKey === 'amountMinor' || pathKey === 'amount') {
+      return {
+        type: 'field',
+        field: 'amount',
+        message: 'Enter a valid amount',
+      };
+    }
+    return { type: 'database', message };
+  }
+  const message = e instanceof Error ? e.message : String(e);
+  return { type: 'database', message };
 }
 
 export async function submitAddTransaction(
@@ -210,14 +288,10 @@ export async function submitAddTransaction(
       currencyCode: account?.currencyCode ?? currency,
       title: values.title.trim(),
       note: values.note,
-      tagNames: (values.tags ?? '')
-        .split(',')
-        .map((t) => t.trim())
-        .filter(Boolean),
+      tagNames: parseTagNames(values.tags),
     });
     return { ok: true, transactionId: txId };
   } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
-    return { ok: false, error: { type: 'database', message } };
+    return { ok: false, error: errorFromThrown(e) };
   }
 }

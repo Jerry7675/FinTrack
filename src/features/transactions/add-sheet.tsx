@@ -36,12 +36,14 @@ import type { Category } from '@/lib/db/schema';
 import { layout } from '@/lib/layout';
 import { persistImage, pickImage, takePhoto } from '@/lib/media';
 import { fromMinorUnits, parseAmountToMinor } from '@/lib/money';
+import { TRANSACTION_LIMITS } from '@/lib/validation';
 import { useApp } from '@/providers/app-provider';
 
 import {
   type AddTransactionField,
   firstAddTransactionFieldWithError,
   getAddTransactionSaveAvailability,
+  resolveDefaultAccountId,
   submitAddTransaction,
 } from './submit-add-transaction';
 
@@ -51,20 +53,57 @@ type Props = {
   onSaved: () => void;
 };
 
-const formSchema = z.object({
-  mode: z.enum(['expense', 'income', 'transfer']),
-  amount: z.string().min(1, 'Enter an amount'),
-  title: z.string(),
-  note: z.string().optional(),
-  tags: z.string().optional(),
-  accountId: z.string().min(1, 'Select an account'),
-  toAccountId: z.string().optional(),
-  categoryId: z.string().nullable().optional(),
-});
+const formSchema = z
+  .object({
+    mode: z.enum(['expense', 'income', 'transfer']),
+    amount: z.string().min(1, 'Enter an amount'),
+    title: z
+      .string()
+      .max(
+        TRANSACTION_LIMITS.titleMax,
+        `Title must be ${TRANSACTION_LIMITS.titleMax} characters or fewer`
+      ),
+    note: z
+      .string()
+      .max(
+        TRANSACTION_LIMITS.noteMax,
+        `Note must be ${TRANSACTION_LIMITS.noteMax} characters or fewer`
+      )
+      .optional(),
+    tags: z.string().optional(),
+    accountId: z.string().min(1, 'Select an account'),
+    toAccountId: z.string().optional(),
+    categoryId: z.string().nullable().optional(),
+  })
+  .superRefine((data, ctx) => {
+    const tagNames = (data.tags ?? '')
+      .split(',')
+      .map((t) => t.trim())
+      .filter(Boolean);
+    if (tagNames.some((tag) => tag.length > TRANSACTION_LIMITS.tagMax)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Each tag must be ${TRANSACTION_LIMITS.tagMax} characters or fewer`,
+        path: ['tags'],
+      });
+    }
+  });
 
 type FormValues = z.infer<typeof formSchema>;
 
-function AddTransactionSheetBody({ visible, onClose, onSaved }: Props) {
+type BodyProps = Props & {
+  showRootToast: (
+    message: string,
+    tone?: 'default' | 'success' | 'error'
+  ) => void;
+};
+
+function AddTransactionSheetBody({
+  visible,
+  onClose,
+  onSaved,
+  showRootToast,
+}: BodyProps) {
   const { accounts, settings, colorScheme, bumpData, ready } = useApp();
   const { showToast } = useToast();
   const c = useThemeColors();
@@ -111,7 +150,7 @@ function AddTransactionSheetBody({ visible, onClose, onSaved }: Props) {
 
   useEffect(() => {
     if (!visible || !ready) return;
-    const nextId = settings?.activeAccountId || accounts[0]?.id || '';
+    const nextId = resolveDefaultAccountId(accounts, settings?.activeAccountId);
     if (nextId) {
       setValue('accountId', nextId);
     }
@@ -234,12 +273,12 @@ function AddTransactionSheetBody({ visible, onClose, onSaved }: Props) {
         title: '',
         note: '',
         tags: '',
-        accountId: settings?.activeAccountId || accounts[0]?.id || '',
+        accountId: resolveDefaultAccountId(accounts, settings?.activeAccountId),
         toAccountId: '',
         categoryId: null,
       });
       setPendingImages([]);
-      showToast('Saved', 'success');
+      showRootToast('Saved', 'success');
       bumpData();
       onSaved();
     } catch (e) {
@@ -301,8 +340,9 @@ function AddTransactionSheetBody({ visible, onClose, onSaved }: Props) {
             <Controller
               control={control}
               name='amount'
-              render={({ field: { value, onChange } }) => (
+              render={({ field: { value, onChange, ref } }) => (
                 <Field
+                  ref={ref}
                   label='Amount'
                   value={value}
                   onChangeText={onChange}
@@ -321,8 +361,9 @@ function AddTransactionSheetBody({ visible, onClose, onSaved }: Props) {
             <Controller
               control={control}
               name='title'
-              render={({ field: { value, onChange } }) => (
+              render={({ field: { value, onChange, ref } }) => (
                 <Field
+                  ref={ref}
                   label='Title'
                   value={value}
                   onChangeText={onChange}
@@ -419,13 +460,15 @@ function AddTransactionSheetBody({ visible, onClose, onSaved }: Props) {
           <Controller
             control={control}
             name='note'
-            render={({ field: { value, onChange } }) => (
+            render={({ field: { value, onChange, ref } }) => (
               <Field
+                ref={ref}
                 label='Note'
                 value={value}
                 onChangeText={onChange}
                 placeholder='Optional note'
                 multiline
+                error={errors.note?.message}
               />
             )}
           />
@@ -433,12 +476,14 @@ function AddTransactionSheetBody({ visible, onClose, onSaved }: Props) {
             <Controller
               control={control}
               name='tags'
-              render={({ field: { value, onChange } }) => (
+              render={({ field: { value, onChange, ref } }) => (
                 <Field
+                  ref={ref}
                   label='Tags'
                   value={value}
                   onChangeText={onChange}
                   placeholder='saas, aws (comma separated)'
+                  error={errors.tags?.message}
                 />
               )}
             />
@@ -545,6 +590,8 @@ function AddTransactionSheetBody({ visible, onClose, onSaved }: Props) {
 }
 
 export function AddTransactionSheet({ visible, onClose, onSaved }: Props) {
+  const { showToast: showRootToast } = useToast();
+
   return (
     <Modal
       visible={visible}
@@ -556,6 +603,7 @@ export function AddTransactionSheet({ visible, onClose, onSaved }: Props) {
           visible={visible}
           onClose={onClose}
           onSaved={onSaved}
+          showRootToast={showRootToast}
         />
       </ModalToastProvider>
     </Modal>

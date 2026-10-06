@@ -1,6 +1,13 @@
 import { z } from 'zod';
 import { MAX_MINOR } from './money';
 
+/** Shared limits for transaction forms and `transactionInputSchema`. */
+export const TRANSACTION_LIMITS = {
+  titleMax: 120,
+  noteMax: 500,
+  tagMax: 40,
+} as const;
+
 export const transactionInputSchema = z.object({
   accountId: z.string().min(1),
   categoryId: z.string().nullable().optional(),
