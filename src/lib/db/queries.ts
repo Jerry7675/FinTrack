@@ -265,6 +265,7 @@ export async function getLastEntry(
           lt(transactions.amountMinor, 0)
         )
       )
+      // Newest first: createdAt, then id (text pk) for deterministic ties.
       .orderBy(desc(transactions.createdAt), desc(transactions.id))
       .limit(1);
 
@@ -310,6 +311,7 @@ export async function getLastEntry(
     .innerJoin(accounts, eq(transactions.accountId, accounts.id))
     .leftJoin(categories, eq(transactions.categoryId, categories.id))
     .where(and(...liveEntryConditions, eq(transactions.type, type)))
+    // Newest first: createdAt, then id (text pk) for deterministic ties.
     .orderBy(desc(transactions.createdAt), desc(transactions.id))
     .limit(1);
 
@@ -349,6 +351,7 @@ export async function getLastEntryForCategory(
         eq(transactions.categoryId, categoryId)
       )
     )
+    // Newest first: createdAt, then id (text pk) for deterministic ties.
     .orderBy(desc(transactions.createdAt), desc(transactions.id))
     .limit(1);
 

@@ -224,6 +224,18 @@ describe('category usage queries', () => {
   it('getLastEntry skips soft-deleted accounts and categories', async () => {
     const { db, drizzleDb } = createMigratedDb();
     await seedBase(drizzleDb);
+    const ts = FIXED_NOW.getTime();
+
+    await createTransaction(db, {
+      accountId: 'acc',
+      categoryId: 'cat-a',
+      type: 'expense',
+      amountMinor: 60,
+      currencyCode: 'USD',
+      title: 'Valid',
+      occurredAt: FIXED_NOW,
+    });
+
     await createTransaction(db, {
       accountId: 'acc',
       categoryId: 'cat-b',
@@ -238,18 +250,110 @@ describe('category usage queries', () => {
       .set({ deletedAt: new Date() })
       .where(eq(categories.id, 'cat-b'));
 
-    await createTransaction(db, {
-      accountId: 'acc',
+    await drizzleDb.insert(accounts).values({
+      id: 'acc-gone',
+      groupId: 'grp',
+      name: 'Closed',
+      currencyCode: 'USD',
+      type: 'cash',
+      sortOrder: 9,
+      createdAt: new Date(ts),
+      updatedAt: new Date(ts),
+      deletedAt: new Date(ts),
+    });
+    await drizzleDb.insert(transactions).values({
+      id: 'tx-deleted-acct',
+      accountId: 'acc-gone',
       categoryId: 'cat-a',
       type: 'expense',
-      amountMinor: 60,
+      amountMinor: 999,
       currencyCode: 'USD',
-      title: 'Valid',
+      title: 'Deleted account',
       occurredAt: FIXED_NOW,
+      createdAt: new Date(ts + 10_000),
+      updatedAt: new Date(ts + 10_000),
     });
 
     const last = await getLastEntry(db, 'expense', FIXED_NOW);
     expect(last?.title).toBe('Valid');
+  });
+
+  it('getLastEntryForCategory skips soft-deleted accounts', async () => {
+    const { db, drizzleDb } = createMigratedDb();
+    await seedBase(drizzleDb);
+    const ts = FIXED_NOW.getTime();
+
+    await createTransaction(db, {
+      accountId: 'acc',
+      categoryId: 'cat-a',
+      type: 'expense',
+      amountMinor: 40,
+      currencyCode: 'USD',
+      title: 'On live account',
+      occurredAt: FIXED_NOW,
+    });
+
+    await drizzleDb.insert(accounts).values({
+      id: 'acc-gone',
+      groupId: 'grp',
+      name: 'Closed',
+      currencyCode: 'USD',
+      type: 'cash',
+      sortOrder: 9,
+      createdAt: new Date(ts),
+      updatedAt: new Date(ts),
+      deletedAt: new Date(ts),
+    });
+    await drizzleDb.insert(transactions).values({
+      id: 'tx-cat-deleted-acct',
+      accountId: 'acc-gone',
+      categoryId: 'cat-a',
+      type: 'expense',
+      amountMinor: 99,
+      currencyCode: 'USD',
+      title: 'On deleted account',
+      occurredAt: FIXED_NOW,
+      createdAt: new Date(ts + 10_000),
+      updatedAt: new Date(ts + 10_000),
+    });
+
+    const last = await getLastEntryForCategory(db, 'cat-a');
+    expect(last?.title).toBe('On live account');
+  });
+
+  it('getLastEntry for transfer orders by createdAt not occurredAt', async () => {
+    const { db, drizzleDb } = createMigratedDb();
+    await seedBase(drizzleDb);
+    const ts = FIXED_NOW.getTime();
+
+    await createTransfer(db, {
+      fromAccountId: 'acc',
+      toAccountId: 'acc-2',
+      amountMinor: 1000,
+      fromCurrency: 'USD',
+      toCurrency: 'USD',
+      title: 'Older created',
+      occurredAt: new Date('2020-01-01T00:00:00.000Z'),
+    });
+
+    await drizzleDb
+      .update(transactions)
+      .set({ createdAt: new Date(ts), updatedAt: new Date(ts) })
+      .where(eq(transactions.title, 'Older created'));
+
+    await createTransfer(db, {
+      fromAccountId: 'acc-2',
+      toAccountId: 'acc',
+      amountMinor: 2000,
+      fromCurrency: 'USD',
+      toCurrency: 'USD',
+      title: 'Newer created',
+      occurredAt: new Date('2099-01-01T00:00:00.000Z'),
+    });
+
+    const last = await getLastEntry(db, 'transfer', FIXED_NOW);
+    expect(last?.title).toBe('Newer created');
+    expect(last?.accountId).toBe('acc-2');
   });
 
   it('getLastEntry for transfer uses the from leg and to account', async () => {
