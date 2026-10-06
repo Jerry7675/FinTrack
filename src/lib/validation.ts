@@ -6,6 +6,7 @@ export const TRANSACTION_LIMITS = {
   titleMax: 120,
   noteMax: 500,
   tagMax: 40,
+  tagCountMax: 10,
 } as const;
 
 export const transactionInputSchema = z.object({
@@ -21,7 +22,10 @@ export const transactionInputSchema = z.object({
   currencyCode: z.string().length(3),
   title: z.string().min(1).max(120),
   note: z.string().max(500).optional(),
-  tagNames: z.array(z.string().min(1).max(40)).optional(),
+  tagNames: z
+    .array(z.string().min(1).max(TRANSACTION_LIMITS.tagMax))
+    .max(TRANSACTION_LIMITS.tagCountMax)
+    .optional(),
 });
 
 export const accountInputSchema = z.object({

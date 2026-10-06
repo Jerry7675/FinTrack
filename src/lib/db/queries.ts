@@ -1,4 +1,10 @@
-import { startOfDay, startOfMonth, startOfWeek, startOfYear } from 'date-fns';
+import {
+  startOfDay,
+  startOfMonth,
+  startOfWeek,
+  startOfYear,
+  subDays,
+} from 'date-fns';
 import {
   and,
   desc,
@@ -7,6 +13,7 @@ import {
   isNotNull,
   isNull,
   like,
+  lt,
   lte,
   or,
   sql,
@@ -175,6 +182,189 @@ export async function listCategories(
     .from(categories)
     .where(and(...conditions))
     .orderBy(categories.sortOrder, categories.name);
+}
+
+export type CategoryUsageRow = {
+  categoryId: string;
+  count: number;
+  lastUsedAt: Date | null;
+};
+
+export async function listCategoryUsage(
+  database: AppDatabase,
+  kind: 'expense' | 'income',
+  sinceDays = 90,
+  now: Date = new Date()
+): Promise<CategoryUsageRow[]> {
+  const since = subDays(startOfDay(now), sinceDays);
+  const rows = await database
+    .select({
+      categoryId: transactions.categoryId,
+      count: sql<number>`count(*)`,
+      lastUsedAt: sql<number>`max(${transactions.occurredAt})`,
+    })
+    .from(transactions)
+    .where(
+      and(
+        isNull(transactions.deletedAt),
+        eq(transactions.type, kind),
+        isNotNull(transactions.categoryId),
+        gte(transactions.occurredAt, since)
+      )
+    )
+    .groupBy(transactions.categoryId);
+
+  return rows
+    .filter((row) => row.categoryId != null)
+    .map((row) => ({
+      categoryId: row.categoryId as string,
+      count: Number(row.count),
+      lastUsedAt: row.lastUsedAt ? new Date(Number(row.lastUsedAt)) : null,
+    }));
+}
+
+export type LastEntryRow = {
+  accountId: string;
+  toAccountId?: string | null;
+  categoryId: string | null;
+  title: string;
+  amountMinor: number;
+  currencyCode: string;
+  occurredAt: Date;
+};
+
+const liveEntryConditions = [
+  isNull(transactions.deletedAt),
+  isNull(accounts.deletedAt),
+  or(isNull(transactions.categoryId), isNull(categories.deletedAt)),
+];
+
+export async function getLastEntry(
+  database: AppDatabase,
+  type: 'expense' | 'income' | 'transfer',
+  _now: Date = new Date()
+): Promise<LastEntryRow | null> {
+  if (type === 'transfer') {
+    const fromRows = await database
+      .select({
+        accountId: transactions.accountId,
+        categoryId: transactions.categoryId,
+        title: transactions.title,
+        amountMinor: transactions.amountMinor,
+        currencyCode: transactions.currencyCode,
+        occurredAt: transactions.occurredAt,
+        transferId: transactions.transferId,
+      })
+      .from(transactions)
+      .innerJoin(accounts, eq(transactions.accountId, accounts.id))
+      .leftJoin(categories, eq(transactions.categoryId, categories.id))
+      .where(
+        and(
+          ...liveEntryConditions,
+          eq(transactions.type, 'transfer'),
+          lt(transactions.amountMinor, 0)
+        )
+      )
+      // Newest first: createdAt, then id (text pk) for deterministic ties.
+      .orderBy(desc(transactions.createdAt), desc(transactions.id))
+      .limit(1);
+
+    const from = fromRows[0];
+    if (!from?.transferId) return null;
+
+    const toRows = await database
+      .select({ accountId: transactions.accountId })
+      .from(transactions)
+      .innerJoin(accounts, eq(transactions.accountId, accounts.id))
+      .where(
+        and(
+          isNull(transactions.deletedAt),
+          isNull(accounts.deletedAt),
+          eq(transactions.transferId, from.transferId),
+          eq(transactions.type, 'transfer'),
+          sql`${transactions.amountMinor} > 0`
+        )
+      )
+      .limit(1);
+
+    return {
+      accountId: from.accountId,
+      toAccountId: toRows[0]?.accountId ?? null,
+      categoryId: from.categoryId,
+      title: from.title,
+      amountMinor: Math.abs(from.amountMinor),
+      currencyCode: from.currencyCode,
+      occurredAt: from.occurredAt,
+    };
+  }
+
+  const rows = await database
+    .select({
+      accountId: transactions.accountId,
+      categoryId: transactions.categoryId,
+      title: transactions.title,
+      amountMinor: transactions.amountMinor,
+      currencyCode: transactions.currencyCode,
+      occurredAt: transactions.occurredAt,
+    })
+    .from(transactions)
+    .innerJoin(accounts, eq(transactions.accountId, accounts.id))
+    .leftJoin(categories, eq(transactions.categoryId, categories.id))
+    .where(and(...liveEntryConditions, eq(transactions.type, type)))
+    // Newest first: createdAt, then id (text pk) for deterministic ties.
+    .orderBy(desc(transactions.createdAt), desc(transactions.id))
+    .limit(1);
+
+  const row = rows[0];
+  if (!row) return null;
+  return {
+    accountId: row.accountId,
+    categoryId: row.categoryId,
+    title: row.title,
+    amountMinor: row.amountMinor,
+    currencyCode: row.currencyCode,
+    occurredAt: row.occurredAt,
+  };
+}
+
+export async function getLastEntryForCategory(
+  database: AppDatabase,
+  categoryId: string
+): Promise<LastEntryRow | null> {
+  const rows = await database
+    .select({
+      accountId: transactions.accountId,
+      categoryId: transactions.categoryId,
+      title: transactions.title,
+      amountMinor: transactions.amountMinor,
+      currencyCode: transactions.currencyCode,
+      occurredAt: transactions.occurredAt,
+    })
+    .from(transactions)
+    .innerJoin(accounts, eq(transactions.accountId, accounts.id))
+    .innerJoin(categories, eq(transactions.categoryId, categories.id))
+    .where(
+      and(
+        isNull(transactions.deletedAt),
+        isNull(accounts.deletedAt),
+        isNull(categories.deletedAt),
+        eq(transactions.categoryId, categoryId)
+      )
+    )
+    // Newest first: createdAt, then id (text pk) for deterministic ties.
+    .orderBy(desc(transactions.createdAt), desc(transactions.id))
+    .limit(1);
+
+  const row = rows[0];
+  if (!row) return null;
+  return {
+    accountId: row.accountId,
+    categoryId: row.categoryId,
+    title: row.title,
+    amountMinor: row.amountMinor,
+    currencyCode: row.currencyCode,
+    occurredAt: row.occurredAt,
+  };
 }
 
 export type TransactionFilters = {

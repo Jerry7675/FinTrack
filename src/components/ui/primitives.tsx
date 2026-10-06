@@ -291,8 +291,6 @@ export const Field = forwardRef<
   const c = useThemeColors();
   const bg =
     colorScheme === 'dark' ? 'bg-surface-dark-sunken' : 'bg-surface-sunken';
-  const borderColor = error ? c.expense : c.lineStrong;
-
   return (
     <View className='gap-1.5'>
       {label ? (
@@ -310,9 +308,10 @@ export const Field = forwardRef<
             fontSize: fontSize(15),
             minHeight: Math.max(44, vs(48)),
             borderWidth: 1,
-            borderColor,
+            borderColor: c.lineStrong,
           },
           style,
+          error ? { borderColor: c.expense } : null,
         ]}
         {...props}
       />
