@@ -12,6 +12,7 @@ const base = {
   pendingImageCount: 0,
   userPickedAccount: false,
   userPickedCategory: false,
+  userPickedToAccount: false,
 };
 
 describe('isQuickAddUserDirty', () => {
@@ -21,6 +22,10 @@ describe('isQuickAddUserDirty', () => {
 
   it('detects amount entry', () => {
     expect(isQuickAddUserDirty({ ...base, amount: '12' })).toBe(true);
+  });
+
+  it('detects a typed title', () => {
+    expect(isQuickAddUserDirty({ ...base, title: 'Coffee' })).toBe(true);
   });
 
   it('detects explicit category pick', () => {
