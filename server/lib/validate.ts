@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { RECEIPT_FIELD_KEYS } from '../config';
+import { RECEIPT_FIELD_KEYS } from '../config.js';
 
 const fieldDefSchema = z.object({
   key: z.enum(['amount', 'currency', 'date', 'merchant', 'categoryHint']),

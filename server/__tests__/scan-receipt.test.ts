@@ -2,15 +2,15 @@
  * @jest-environment node
  */
 
-import { handleScanReceipt } from '../api/scan-receipt';
-import { MAX_DECODED_JPEG_BYTES, MAX_REQUEST_BODY_BYTES } from '../config';
-import type { OpenRouterClient } from '../lib/extract';
-import { resetRateLimitState } from '../lib/rate-limit';
-import { buildScanBody, minimalJpegBase64, postScan } from './helpers';
+import { handleScanReceipt } from '../api/scan-receipt.js';
+import { MAX_DECODED_JPEG_BYTES, MAX_REQUEST_BODY_BYTES } from '../config.js';
+import type { OpenRouterClient } from '../lib/extract.js';
+import { resetRateLimitState } from '../lib/rate-limit.js';
+import { buildScanBody, minimalJpegBase64, postScan } from './helpers.js';
 
 function mockDeps(
   extractResult: Awaited<
-    ReturnType<typeof import('../lib/extract').extractReceiptFields>
+    ReturnType<typeof import('../lib/extract.js').extractReceiptFields>
   >
 ) {
   const send = jest.fn();
@@ -177,6 +177,31 @@ describe('scan-receipt handler', () => {
         currency: 'USD',
         date: '2024-06-01',
         merchant: 'Cafe',
+        categoryHint: 'food',
+      },
+    });
+  });
+
+  it('returns 200 when model JSON uses numeric scalars', async () => {
+    const deps = mockDeps({
+      ok: true,
+      content: JSON.stringify({
+        amount: 12.5,
+        currency: 'USD',
+        date: '2024-06-01',
+        merchant: 99,
+        categoryHint: 'food',
+      }),
+    });
+    const res = await handleScanReceipt(postScan(buildScanBody()), deps);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      v: 1,
+      fields: {
+        amount: '12.5',
+        currency: 'USD',
+        date: '2024-06-01',
+        merchant: '99',
         categoryHint: 'food',
       },
     });

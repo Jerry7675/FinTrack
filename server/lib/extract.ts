@@ -11,8 +11,8 @@ import {
   PROVIDER_MAX_TOKENS,
   PROVIDER_TEMPERATURE,
   PROVIDER_TIMEOUT_MS,
-} from '../config';
-import { buildSystemPrompt, buildUserPrompt } from './prompt';
+} from '../config.js';
+import { buildSystemPrompt, buildUserPrompt } from './prompt.js';
 
 export type ExtractResult =
   | { ok: true; content: string }
@@ -87,7 +87,11 @@ export async function extractReceiptFields(
           responseFormat: { type: 'json_object' },
         },
       },
-      { timeoutMs: PROVIDER_TIMEOUT_MS }
+      {
+        timeoutMs: PROVIDER_TIMEOUT_MS,
+        retries: { strategy: 'none' },
+        signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
+      }
     );
 
     const content = extractTextContent(response);

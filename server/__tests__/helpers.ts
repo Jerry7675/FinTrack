@@ -1,4 +1,4 @@
-import { RECEIPT_FIELD_KEYS } from '../config';
+import { RECEIPT_FIELD_KEYS } from '../config.js';
 
 /** Minimal valid JPEG (SOI + JFIF stub + EOI). */
 export const MINIMAL_JPEG_BYTES = Uint8Array.from([

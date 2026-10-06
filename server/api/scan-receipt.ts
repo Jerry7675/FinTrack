@@ -1,21 +1,21 @@
-import { MAX_DECODED_JPEG_BYTES, MAX_REQUEST_BODY_BYTES } from '../config';
-import { resolveClientIp } from '../lib/client-ip';
+import { MAX_DECODED_JPEG_BYTES, MAX_REQUEST_BODY_BYTES } from '../config.js';
+import { resolveClientIp } from '../lib/client-ip.js';
 import {
   createOpenRouterClient,
   extractReceiptFields,
   type OpenRouterClient,
-} from '../lib/extract';
-import { errorResponse, jsonResponse } from '../lib/http';
-import { decodeBase64Image, isJpegBuffer } from '../lib/jpeg';
-import { logError } from '../lib/log';
+} from '../lib/extract.js';
+import { errorResponse, jsonResponse } from '../lib/http.js';
+import { decodeBase64Image, isJpegBuffer } from '../lib/jpeg.js';
+import { logError } from '../lib/log.js';
 import {
   allFieldsNull,
   parseModelJson,
   type ReceiptFields,
   sanitizeModelFields,
-} from '../lib/output';
-import { checkRateLimit } from '../lib/rate-limit';
-import { fieldsMatchExpected, scanRequestSchema } from '../lib/validate';
+} from '../lib/output.js';
+import { checkRateLimit } from '../lib/rate-limit.js';
+import { fieldsMatchExpected, scanRequestSchema } from '../lib/validate.js';
 
 export type ScanReceiptDeps = {
   getApiKey: () => string | undefined;
@@ -133,13 +133,7 @@ export async function handleScanReceipt(
     return errorResponse(422, { error: 'unreadable' });
   }
 
-  let fields: ReceiptFields;
-  try {
-    fields = sanitizeModelFields(modelJson);
-  } catch {
-    logError('unreadable');
-    return errorResponse(422, { error: 'unreadable' });
-  }
+  const fields = sanitizeModelFields(modelJson);
 
   if (allFieldsNull(fields)) {
     logError('unreadable');

@@ -1,4 +1,4 @@
-import { ALLOWED_CATEGORY_HINTS } from '../config';
+import { ALLOWED_CATEGORY_HINTS } from '../config.js';
 
 /** Fixed field definitions — never built from client-sent description text. */
 const FIELD_DEFINITIONS = [

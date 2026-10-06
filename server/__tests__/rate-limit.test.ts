@@ -2,13 +2,13 @@
  * @jest-environment node
  */
 
-import { RATE_LIMIT_MAX_TRACKED_IPS } from '../config';
-import { resolveClientIp } from '../lib/client-ip';
+import { RATE_LIMIT_MAX_TRACKED_IPS } from '../config.js';
+import { resolveClientIp } from '../lib/client-ip.js';
 import {
   checkRateLimit,
   rateLimitBucketCount,
   resetRateLimitState,
-} from '../lib/rate-limit';
+} from '../lib/rate-limit.js';
 
 describe('resolveClientIp', () => {
   it('prefers x-real-ip over leftmost x-forwarded-for', () => {

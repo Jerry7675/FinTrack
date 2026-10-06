@@ -4,8 +4,8 @@
 
 import type { ChatResult } from '@openrouter/sdk/models';
 
-import { extractReceiptFields, type OpenRouterClient } from '../lib/extract';
-import { paymentRequiredError, tooManyRequestsError } from './sdk-errors';
+import { extractReceiptFields, type OpenRouterClient } from '../lib/extract.js';
+import { paymentRequiredError, tooManyRequestsError } from './sdk-errors.js';
 
 function mockClient(send: OpenRouterClient['chat']['send']): OpenRouterClient {
   return { chat: { send } };
@@ -69,6 +69,8 @@ describe('extractReceiptFields', () => {
       type: 'json_object',
     });
     expect(options?.timeoutMs).toBeGreaterThan(0);
+    expect(options?.retries).toEqual({ strategy: 'none' });
+    expect(options?.signal).toBeDefined();
     const messages = request?.chatRequest.messages ?? [];
     const user = messages.find((m: { role: string }) => m.role === 'user');
     const parts = Array.isArray(user?.content) ? user.content : [];

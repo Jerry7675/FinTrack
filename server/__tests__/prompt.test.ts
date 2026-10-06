@@ -2,8 +2,8 @@
  * @jest-environment node
  */
 
-import { getFixedPromptText } from '../lib/prompt';
-import { validFieldsPayload } from './helpers';
+import { getFixedPromptText } from '../lib/prompt.js';
+import { validFieldsPayload } from './helpers.js';
 
 describe('prompt', () => {
   it('is built only from server field definitions', () => {

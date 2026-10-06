@@ -2,7 +2,7 @@ import {
   RATE_LIMIT_MAX_REQUESTS,
   RATE_LIMIT_MAX_TRACKED_IPS,
   RATE_LIMIT_WINDOW_MS,
-} from '../config';
+} from '../config.js';
 
 type Entry = {
   timestamps: number[];

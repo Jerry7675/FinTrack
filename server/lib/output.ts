@@ -1,25 +1,14 @@
-import { z } from 'zod';
-
 import {
   ALLOWED_CATEGORY_HINTS,
   MERCHANT_MAX_CHARS,
   RAW_FIELD_CAPS,
+  RECEIPT_FIELD_KEYS,
   type ReceiptFieldKey,
-} from '../config';
+} from '../config.js';
 
 const CONTROL_AND_BIDI = /[\p{Cc}\u200B-\u200F\u202A-\u202E\u2066-\u2069]/gu;
 
 export type ReceiptFields = Record<ReceiptFieldKey, string | null>;
-
-const rawFieldSchema = z
-  .object({
-    amount: z.string().nullable().optional(),
-    currency: z.string().nullable().optional(),
-    date: z.string().nullable().optional(),
-    merchant: z.string().nullable().optional(),
-    categoryHint: z.string().nullable().optional(),
-  })
-  .strip();
 
 function stripControlChars(value: string): string {
   return value.replace(CONTROL_AND_BIDI, '');
@@ -121,6 +110,31 @@ function validateCategoryHint(raw: string | null): string | null {
   return trimmed;
 }
 
+/** Coerce model JSON values to strings; non-scalars become null for that field only. */
+export function coerceModelFieldString(value: unknown): string | null {
+  if (value == null) {
+    return null;
+  }
+  if (typeof value === 'string') {
+    return value;
+  }
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return Number.isInteger(value) ? String(value) : String(value);
+  }
+  return null;
+}
+
+function readRawField(parsed: unknown, key: ReceiptFieldKey): string | null {
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return null;
+  }
+  const record = parsed as Record<string, unknown>;
+  if (!(key in record)) {
+    return null;
+  }
+  return coerceModelFieldString(record[key]);
+}
+
 export function parseModelJson(text: string): unknown {
   const trimmed = text.trim();
   const fence = /^```(?:json)?\s*([\s\S]*?)```$/i.exec(trimmed);
@@ -128,39 +142,42 @@ export function parseModelJson(text: string): unknown {
   return JSON.parse(inner) as unknown;
 }
 
-export function sanitizeModelFields(parsed: unknown): ReceiptFields {
-  const obj = rawFieldSchema.parse(parsed);
+function cappedField(
+  parsed: unknown,
+  key: ReceiptFieldKey,
+  max: number
+): string | null {
+  const coerced = readRawField(parsed, key);
+  if (coerced == null) {
+    return null;
+  }
+  return capRaw(stripControlChars(coerced), max);
+}
 
-  const amountRaw = capRaw(
-    obj.amount == null ? null : stripControlChars(String(obj.amount)),
-    RAW_FIELD_CAPS.amount
-  );
-  const currencyRaw = capRaw(
-    obj.currency == null ? null : stripControlChars(String(obj.currency)),
-    RAW_FIELD_CAPS.currency
-  );
-  const dateRaw = capRaw(
-    obj.date == null ? null : stripControlChars(String(obj.date)),
-    RAW_FIELD_CAPS.date
-  );
-  const merchantRaw = capRaw(
-    obj.merchant == null ? null : stripControlChars(String(obj.merchant)),
-    RAW_FIELD_CAPS.merchant
-  );
-  const categoryRaw = capRaw(
-    obj.categoryHint == null
-      ? null
-      : stripControlChars(String(obj.categoryHint)),
+export function sanitizeModelFields(parsed: unknown): ReceiptFields {
+  const amountRaw = cappedField(parsed, 'amount', RAW_FIELD_CAPS.amount);
+  const currencyRaw = cappedField(parsed, 'currency', RAW_FIELD_CAPS.currency);
+  const dateRaw = cappedField(parsed, 'date', RAW_FIELD_CAPS.date);
+  const merchantRaw = cappedField(parsed, 'merchant', RAW_FIELD_CAPS.merchant);
+  const categoryRaw = cappedField(
+    parsed,
+    'categoryHint',
     RAW_FIELD_CAPS.categoryHint
   );
 
-  return {
+  const fields: ReceiptFields = {
     amount: validateAmount(amountRaw),
     currency: validateCurrency(currencyRaw),
     date: validateDate(dateRaw),
     merchant: validateMerchant(merchantRaw),
     categoryHint: validateCategoryHint(categoryRaw),
   };
+
+  for (const key of RECEIPT_FIELD_KEYS) {
+    fields[key] ??= null;
+  }
+
+  return fields;
 }
 
 export function allFieldsNull(fields: ReceiptFields): boolean {
