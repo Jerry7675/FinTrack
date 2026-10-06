@@ -173,6 +173,39 @@ export function resolveDefaultAccountId(
   return accounts[0]?.id ?? '';
 }
 
+/** Quick Add account default: scoped account, then last-used for the mode, then first. */
+export function resolveQuickAddAccountId(
+  accounts: AccountSummary[],
+  activeAccountId?: string | null,
+  lastUsedAccountId?: string | null
+): string {
+  if (
+    activeAccountId &&
+    accounts.some((account) => account.id === activeAccountId)
+  ) {
+    return activeAccountId;
+  }
+  if (
+    lastUsedAccountId &&
+    accounts.some((account) => account.id === lastUsedAccountId)
+  ) {
+    return lastUsedAccountId;
+  }
+  return accounts[0]?.id ?? '';
+}
+
+export function formatQuickAddDateLabel(dateStr: string, now: Date): string {
+  const parsed = parseIsoLocalDate(dateStr);
+  if (!parsed) return dateStr;
+  const todayStr = defaultTransactionDateString(now);
+  const entered = defaultTransactionDateString(parsed);
+  if (entered === todayStr) return 'Today';
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  if (entered === defaultTransactionDateString(yesterday)) return 'Yesterday';
+  return format(parsed, 'MMM d');
+}
+
 export function getAddTransactionSaveAvailability(
   accountsReady: boolean,
   accountCount: number
@@ -210,10 +243,11 @@ export function resolveTransactionTitle(
   const category = categories.find((c) => c.id === values.categoryId);
   const fromCategory = category?.name ?? '';
   if (!fromCategory) return '';
-  if (fromCategory.length <= TRANSACTION_LIMITS.titleMax) {
+  const chars = Array.from(fromCategory);
+  if (chars.length <= TRANSACTION_LIMITS.titleMax) {
     return fromCategory;
   }
-  return fromCategory.slice(0, TRANSACTION_LIMITS.titleMax);
+  return chars.slice(0, TRANSACTION_LIMITS.titleMax).join('');
 }
 
 export function validateAddTransactionInput(

@@ -96,6 +96,16 @@ describe('resolveTransactionTitle', () => {
       )
     ).toHaveLength(120);
   });
+
+  it('truncates with Array.from so emoji are not split', () => {
+    const emojiName = '🍕'.repeat(121);
+    const resolved = resolveTransactionTitle(
+      { ...baseValues, title: '', categoryId: 'cat-emoji' },
+      [{ id: 'cat-emoji', name: emojiName }]
+    );
+    expect(Array.from(resolved)).toHaveLength(120);
+    expect(resolved).toBe(Array.from(emojiName).slice(0, 120).join(''));
+  });
 });
 
 describe('validateTransactionDate', () => {
