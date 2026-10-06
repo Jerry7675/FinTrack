@@ -68,6 +68,11 @@ import {
 } from './category-order';
 import { AmountDisplay, formatMaxAmountLabel, Keypad } from './keypad';
 import { QuickAddDatePicker } from './quick-add-date-picker';
+import { isQuickAddUserDirty } from './quick-add-dirty';
+import {
+  type QuickAddSaveMode,
+  shouldCloseSheetAfterSave,
+} from './quick-add-save';
 import {
   type AddTransactionField,
   defaultTransactionDateString,
@@ -131,9 +136,7 @@ type BodyProps = Props & {
   bindRequestClose: (handler: () => void) => void;
 };
 
-function snapshotValues(values: FormValues, images: string[]) {
-  return JSON.stringify({ values, images });
-}
+type LoadContextReason = 'open' | 'mode' | 'refresh';
 
 function AddTransactionSheetBody({
   visible,
@@ -165,7 +168,11 @@ function AddTransactionSheetBody({
   );
   const [accountBalance, setAccountBalance] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
-  const [saveMode, setSaveMode] = useState<'save' | 'saveNew'>('save');
+  const [activeSaveMode, setActiveSaveMode] = useState<QuickAddSaveMode | null>(
+    null
+  );
+  const [saveAttempted, setSaveAttempted] = useState(false);
+  const [amountTouched, setAmountTouched] = useState(false);
   const [pendingImages, setPendingImages] = useState<string[]>([]);
   const [keypadVisible, setKeypadVisible] = useState(true);
   const [moreDetailsOpen, setMoreDetailsOpen] = useState(false);
@@ -176,9 +183,12 @@ function AddTransactionSheetBody({
   const [amountBlocked, setAmountBlocked] = useState(false);
 
   const scrollRef = useRef<ScrollView>(null);
+  const categoryScrollRef = useRef<ScrollView>(null);
   const wasVisibleRef = useRef(false);
-  const initialSnapshotRef = useRef('');
+  const openedDateRef = useRef(defaultTransactionDateString());
+  const prevModeRef = useRef<FormValues['mode']>('expense');
   const userPickedAccountRef = useRef(false);
+  const userPickedCategoryRef = useRef(false);
   const savingRef = useRef(false);
 
   const {
@@ -221,85 +231,105 @@ function AddTransactionSheetBody({
 
   const amountMinor = parseAmountToMinor(amountText, currency);
   const amountHelper = useMemo(() => {
-    if (amountBlocked) {
+    if (amountBlocked || (amountText.length > 0 && amountMinor === null)) {
       return `Largest amount is ${formatMaxAmountLabel(currency, locale)}`;
     }
-    if (!amountText || amountMinor === 0) {
+    if (
+      (amountTouched || saveAttempted) &&
+      amountText.length > 0 &&
+      amountMinor === 0
+    ) {
       return 'Amount must be more than 0';
     }
     return '';
-  }, [amountBlocked, amountText, amountMinor, currency, locale]);
-
-  const loadContext = useCallback(async () => {
-    if (!ready) return;
-    setContextLoading(true);
-    setContextError(false);
-    setContinueWithoutCategory(false);
-    try {
-      const kind =
-        mode === 'transfer'
-          ? undefined
-          : mode === 'income'
-            ? 'income'
-            : 'expense';
-      const [rows, usage, last] = await Promise.all([
-        kind ? listCategories(db, kind) : Promise.resolve([]),
-        kind ? listCategoryUsage(db, kind, 90) : Promise.resolve([]),
-        getLastEntry(db, mode),
-      ]);
-      setCategories(rows);
-      setLastEntry(last);
-      const lastCatId =
-        mode !== 'transfer' && last?.categoryId ? last.categoryId : null;
-      const ordered = orderCategoriesForQuickAdd(rows, usage, lastCatId);
-      setOrderedCategories(ordered);
-      const defaultCat = defaultCategoryIdFromOrder(ordered, lastCatId);
-      setValue('categoryId', defaultCat);
-
-      const preferredAccount = last?.accountId ?? null;
-      const nextAccount = resolveQuickAddAccountId(
-        accounts,
-        settings?.activeAccountId,
-        userPickedAccountRef.current ? accountId : preferredAccount
-      );
-      if (!userPickedAccountRef.current) {
-        setValue('accountId', nextAccount);
-      }
-
-      if (mode === 'transfer' && accounts.length >= 2) {
-        const other = accounts.find((a) => a.id !== nextAccount);
-        if (other && !getValues('toAccountId')) {
-          setValue('toAccountId', other.id);
-        }
-      }
-
-      setContextReady(true);
-    } catch (e) {
-      console.error('Quick Add context load failed', e);
-      setContextError(true);
-      setContextReady(false);
-    } finally {
-      setContextLoading(false);
-    }
   }, [
-    ready,
-    mode,
-    accounts,
-    settings?.activeAccountId,
-    setValue,
-    accountId,
-    getValues,
+    amountBlocked,
+    amountText,
+    amountMinor,
+    amountTouched,
+    saveAttempted,
+    currency,
+    locale,
   ]);
+
+  const loadContext = useCallback(
+    async (reason: LoadContextReason) => {
+      if (!ready) return;
+      setContextLoading(true);
+      setContextError(false);
+      if (reason === 'open') {
+        setContinueWithoutCategory(false);
+      }
+      try {
+        const kind =
+          mode === 'transfer'
+            ? undefined
+            : mode === 'income'
+              ? 'income'
+              : 'expense';
+        const [rows, usage, last] = await Promise.all([
+          kind ? listCategories(db, kind) : Promise.resolve([]),
+          kind ? listCategoryUsage(db, kind, 90) : Promise.resolve([]),
+          getLastEntry(db, mode),
+        ]);
+        setCategories(rows);
+        setLastEntry(last);
+        const lastCatId =
+          mode !== 'transfer' && last?.categoryId ? last.categoryId : null;
+        const ordered = orderCategoriesForQuickAdd(rows, usage, lastCatId);
+        setOrderedCategories(ordered);
+        const defaultCat = defaultCategoryIdFromOrder(ordered, lastCatId);
+
+        if (reason === 'open' || reason === 'mode') {
+          setValue('categoryId', defaultCat);
+        }
+
+        if (
+          reason !== 'refresh' &&
+          (reason === 'open' || !userPickedAccountRef.current)
+        ) {
+          const preferredAccount = last?.accountId ?? null;
+          const nextAccount = resolveQuickAddAccountId(
+            accounts,
+            settings?.activeAccountId,
+            reason === 'open' ? preferredAccount : null
+          );
+          setValue('accountId', nextAccount);
+
+          if (mode === 'transfer' && accounts.length >= 2) {
+            const other = accounts.find((a) => a.id !== nextAccount);
+            if (other) {
+              setValue('toAccountId', other.id);
+            }
+          }
+        }
+
+        setContextReady(true);
+      } catch (e) {
+        console.error('Quick Add context load failed', e);
+        setContextError(true);
+        setContextReady(false);
+      } finally {
+        setContextLoading(false);
+      }
+    },
+    [ready, mode, accounts, settings?.activeAccountId, setValue]
+  );
 
   useEffect(() => {
     if (visible && !wasVisibleRef.current) {
+      const today = defaultTransactionDateString();
       userPickedAccountRef.current = false;
-      setValue('date', defaultTransactionDateString());
+      userPickedCategoryRef.current = false;
+      openedDateRef.current = today;
+      setSaveAttempted(false);
+      setAmountTouched(false);
+      setValue('date', today);
       setMoreDetailsOpen(false);
       setKeypadVisible(true);
       setPendingImages([]);
-      initialSnapshotRef.current = snapshotValues(getValues(), []);
-      loadContext();
+      prevModeRef.current = mode;
+      void loadContext('open');
     }
     if (!visible) {
       setContextReady(false);
@@ -307,24 +337,63 @@ function AddTransactionSheetBody({
     } else {
       wasVisibleRef.current = visible;
     }
-  }, [visible, setValue, getValues, loadContext]);
+  }, [visible, setValue, loadContext, mode]);
 
   useEffect(() => {
     if (!visible || !ready) return;
-    loadContext();
-  }, [visible, ready, loadContext]);
+    if (prevModeRef.current === mode) return;
+    const previous = prevModeRef.current;
+    prevModeRef.current = mode;
+    if (
+      previous !== 'transfer' &&
+      mode === 'transfer' &&
+      pendingImages.length
+    ) {
+      void Promise.all(pendingImages.map((path) => deleteLocalImage(path)));
+      setPendingImages([]);
+    }
+    void loadContext('mode');
+  }, [mode, visible, ready, loadContext, pendingImages]);
 
   useEffect(() => {
     if (!accountId || !visible) return;
-    getAccountBalance(db, accountId).then(setAccountBalance);
+    getAccountBalance(db, accountId)
+      .then(setAccountBalance)
+      .catch(() => setAccountBalance(null));
   }, [accountId, visible]);
 
   useEffect(() => {
-    if (!categoryId || mode === 'transfer') {
-      setLastCategoryTitle(null);
-      return;
+    if (!categoryId || mode === 'transfer') return;
+    const idx = orderedCategories.findIndex((c) => c.id === categoryId);
+    if (idx > 0) {
+      categoryScrollRef.current?.scrollTo({
+        x: Math.max(0, idx * 100 - 48),
+        animated: true,
+      });
     }
-    getLastEntryForCategory(db, categoryId).then((row) => {
+  }, [categoryId, mode, orderedCategories]);
+
+  const isDirty = useCallback(() => {
+    const values = getValues();
+    return isQuickAddUserDirty({
+      amount: values.amount,
+      title: values.title,
+      note: values.note,
+      tags: values.tags,
+      date: values.date,
+      openedDate: openedDateRef.current,
+      pendingImageCount: pendingImages.length,
+      userPickedAccount: userPickedAccountRef.current,
+      userPickedCategory: userPickedCategoryRef.current,
+    });
+  }, [getValues, pendingImages]);
+
+  const selectCategory = useCallback(
+    async (id: string) => {
+      userPickedCategoryRef.current = true;
+      setValue('categoryId', id);
+      if (mode === 'transfer') return;
+      const row = await getLastEntryForCategory(db, id);
       setLastCategoryTitle(row?.title ?? null);
       if (
         row?.accountId &&
@@ -333,14 +402,9 @@ function AddTransactionSheetBody({
       ) {
         setValue('accountId', row.accountId);
       }
-    });
-  }, [categoryId, mode, accounts, setValue]);
-
-  const isDirty = useCallback(() => {
-    return (
-      snapshotValues(getValues(), pendingImages) !== initialSnapshotRef.current
-    );
-  }, [getValues, pendingImages]);
+    },
+    [accounts, mode, setValue]
+  );
 
   const requestClose = useCallback(() => {
     if (isDirty()) {
@@ -429,99 +493,149 @@ function AddTransactionSheetBody({
     }
   };
 
-  const runSave = handleSubmit(async (values) => {
-    if (savingRef.current) return;
-    savingRef.current = true;
-    setSaving(true);
-    const closingAfter = saveMode === 'save';
-    try {
-      if (
-        values.mode !== 'transfer' &&
-        categories.length > 0 &&
-        !values.categoryId &&
-        !continueWithoutCategory
-      ) {
-        showToast('Select a category', 'error');
-        return;
-      }
-
-      const result = await submitAddTransaction(values, {
-        accounts,
-        categories: categories.map((cat) => ({ id: cat.id, name: cat.name })),
-        currency,
-        now: new Date(),
-        parseAmountToMinor,
-        createTransaction: (input) => createTransaction(db, input),
-        createTransfer: async (input) => {
-          const from = accounts.find((a) => a.id === input.fromAccountId);
-          const to = accounts.find((a) => a.id === input.toAccountId);
-          if (!from || !to) {
-            throw new Error('Pick a different destination account');
-          }
-          await createTransfer(db, {
-            fromAccountId: input.fromAccountId,
-            toAccountId: input.toAccountId,
-            ...(from.currencyCode === to.currencyCode
-              ? { amountMinor: input.amountMinor }
-              : {
-                  amount: fromMinorUnits(input.amountMinor, from.currencyCode),
-                }),
-            fromCurrency: from.currencyCode,
-            toCurrency: to.currencyCode,
-            title: input.title,
-            note: input.note,
-            occurredAt: input.occurredAt,
-          });
-        },
-      });
-
-      if (!result.ok) {
-        if (result.error.type === 'field') {
-          setError(result.error.field, { message: result.error.message });
-          focusField(result.error.field);
+  const performSave = useCallback(
+    async (values: FormValues, saveMode: QuickAddSaveMode) => {
+      if (savingRef.current) return;
+      savingRef.current = true;
+      setSaving(true);
+      setActiveSaveMode(saveMode);
+      const closingAfter = shouldCloseSheetAfterSave(saveMode);
+      try {
+        if (
+          values.mode !== 'transfer' &&
+          categories.length > 0 &&
+          !values.categoryId &&
+          !continueWithoutCategory
+        ) {
+          showToast('Select a category', 'error');
           return;
         }
+
+        const result = await submitAddTransaction(values, {
+          accounts,
+          categories: categories.map((cat) => ({ id: cat.id, name: cat.name })),
+          currency,
+          now: new Date(),
+          parseAmountToMinor,
+          createTransaction: (input) => createTransaction(db, input),
+          createTransfer: async (input) => {
+            const from = accounts.find((a) => a.id === input.fromAccountId);
+            const to = accounts.find((a) => a.id === input.toAccountId);
+            if (!from || !to) {
+              throw new Error('Pick a different destination account');
+            }
+            await createTransfer(db, {
+              fromAccountId: input.fromAccountId,
+              toAccountId: input.toAccountId,
+              ...(from.currencyCode === to.currencyCode
+                ? { amountMinor: input.amountMinor }
+                : {
+                    amount: fromMinorUnits(
+                      input.amountMinor,
+                      from.currencyCode
+                    ),
+                  }),
+              fromCurrency: from.currencyCode,
+              toCurrency: to.currencyCode,
+              title: input.title,
+              note: input.note,
+              occurredAt: input.occurredAt,
+            });
+          },
+        });
+
+        if (!result.ok) {
+          if (result.error.type === 'field') {
+            setError(result.error.field, { message: result.error.message });
+            focusField(result.error.field);
+            return;
+          }
+          showToast("Couldn't save. Your entry is still here.", 'error');
+          return;
+        }
+
+        let attachmentsFailed = false;
+        if (result.transactionId && pendingImages.length) {
+          try {
+            await addAttachments(
+              db,
+              result.transactionId,
+              pendingImages.map((localPath) => ({ localPath }))
+            );
+          } catch (attachError) {
+            console.error('Add attachments failed:', attachError);
+            attachmentsFailed = true;
+          }
+        }
+
+        if (attachmentsFailed) {
+          showToast('Saved, but receipts could not be attached.', 'error');
+        } else {
+          showRootToast('Saved', 'success');
+        }
+        bumpData();
+        if (accountId) {
+          getAccountBalance(db, accountId)
+            .then(setAccountBalance)
+            .catch(() => setAccountBalance(null));
+        }
+
+        const finishSuccess = (keepCategoryPick: boolean) => {
+          setValue('amount', '');
+          setValue('title', '');
+          setValue('note', '');
+          setValue('tags', '');
+          setPendingImages([]);
+          setAmountTouched(false);
+          setSaveAttempted(false);
+          setKeypadVisible(true);
+          if (!keepCategoryPick) {
+            userPickedCategoryRef.current = false;
+          }
+        };
+
+        if (closingAfter) {
+          finishSuccess(false);
+          onSaved();
+          onClose();
+          return;
+        }
+
+        finishSuccess(true);
+        const refreshedLast = await getLastEntry(db, mode);
+        setLastEntry(refreshedLast);
+      } catch (e) {
+        console.error('Add transaction failed:', e);
         showToast("Couldn't save. Your entry is still here.", 'error');
-        return;
+      } finally {
+        setSaving(false);
+        setActiveSaveMode(null);
+        savingRef.current = false;
       }
+    },
+    [
+      accounts,
+      categories,
+      currency,
+      accountId,
+      pendingImages,
+      continueWithoutCategory,
+      mode,
+      setError,
+      focusField,
+      showToast,
+      showRootToast,
+      bumpData,
+      onSaved,
+      onClose,
+      setValue,
+    ]
+  );
 
-      if (result.transactionId && pendingImages.length) {
-        await addAttachments(
-          db,
-          result.transactionId,
-          pendingImages.map((localPath) => ({ localPath }))
-        );
-      }
-
-      showRootToast('Saved', 'success');
-      bumpData();
-      if (accountId) {
-        getAccountBalance(db, accountId).then(setAccountBalance);
-      }
-
-      if (closingAfter) {
-        setPendingImages([]);
-        onSaved();
-        onClose();
-        return;
-      }
-
-      setValue('amount', '');
-      setValue('title', '');
-      setValue('note', '');
-      setValue('tags', '');
-      setPendingImages([]);
-      setKeypadVisible(true);
-      initialSnapshotRef.current = snapshotValues(getValues(), []);
-      loadContext();
-    } catch (e) {
-      console.error('Add transaction failed:', e);
-      showToast("Couldn't save. Your entry is still here.", 'error');
-    } finally {
-      setSaving(false);
-      savingRef.current = false;
-    }
-  }, onInvalid);
+  const runSave = (saveMode: QuickAddSaveMode) => {
+    setSaveAttempted(true);
+    handleSubmit((values) => performSave(values, saveMode), onInvalid)();
+  };
 
   const saveDisabled =
     saveAvailability.disabled ||
@@ -547,6 +661,7 @@ function AddTransactionSheetBody({
 
   const onRepeatLast = () => {
     if (!lastEntry) return;
+    setAmountTouched(true);
     setValue(
       'amount',
       formatMinorToDecimal(
@@ -555,10 +670,17 @@ function AddTransactionSheetBody({
       )
     );
     if (accounts.some((a) => a.id === lastEntry.accountId)) {
+      userPickedAccountRef.current = true;
       setValue('accountId', lastEntry.accountId);
     }
+    if (
+      lastEntry.toAccountId &&
+      accounts.some((a) => a.id === lastEntry.toAccountId)
+    ) {
+      setValue('toAccountId', lastEntry.toAccountId);
+    }
     if (lastEntry.categoryId && mode !== 'transfer') {
-      setValue('categoryId', lastEntry.categoryId);
+      void selectCategory(lastEntry.categoryId);
     }
     setValue('title', lastEntry.title);
     setKeypadVisible(true);
@@ -611,15 +733,9 @@ function AddTransactionSheetBody({
         <View style={{ width: scale(44) }} />
       </View>
 
-      {showEmptyNoAccounts || showEmptyTransfer ? (
+      {showEmptyNoAccounts ? (
         <View className='flex-1 justify-center gap-4'>
-          <EmptyState
-            title={
-              showEmptyTransfer
-                ? 'You need two accounts to transfer'
-                : 'Add an account to start'
-            }
-          />
+          <EmptyState title='Add an account to start' />
           <Button
             label='Add account'
             onPress={() => {
@@ -638,458 +754,471 @@ function AddTransactionSheetBody({
             />
           </View>
 
-          <View className='mb-2 flex-row items-start gap-3'>
-            <Pressable
-              onPress={() => setAccountPickerOpen(true)}
-              className='rounded-full px-3 py-2'
-              style={{
-                backgroundColor: c.surfaceHigh,
-                minHeight: Math.max(44, scale(44)),
-                justifyContent: 'center',
-              }}
-              accessibilityRole='button'
-              accessibilityLabel={`Currency ${currency}, from ${account?.name ?? 'account'}. Double tap to change account`}
-            >
-              <AppText size='sm' weight='semibold' numeric>
-                {currency}
-              </AppText>
-            </Pressable>
-            <View className='flex-1'>
-              <AmountDisplay
-                amountText={amountText}
-                currencyCode={currency}
-                locale={locale}
+          {showEmptyTransfer ? (
+            <View className='flex-1 justify-center gap-4'>
+              <EmptyState title='You need two accounts to transfer' />
+              <Button
+                label='Add account'
                 onPress={() => {
-                  setKeypadVisible(true);
-                  Keyboard.dismiss();
+                  onClose();
+                  router.push('/(tabs)/accounts' as Href);
                 }}
-                errorMessage={
-                  errors.amount?.message ||
-                  (amountHelper && amountText ? amountHelper : undefined)
-                }
-                helperMessage={
-                  !amountText && amountHelper ? amountHelper : undefined
-                }
               />
             </View>
-          </View>
-
-          <ScrollView
-            ref={scrollRef}
-            className='flex-1'
-            keyboardShouldPersistTaps='handled'
-            keyboardDismissMode='on-drag'
-            contentContainerStyle={{ gap: 14, paddingBottom: 12 }}
-          >
-            {repeatLastLabel ? (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                <Chip
-                  label={repeatLastLabel}
-                  icon='repeat-outline'
-                  onPress={onRepeatLast}
-                />
-              </ScrollView>
-            ) : null}
-
-            {mode !== 'transfer' ? (
-              <View className='gap-2'>
-                <AppText size='sm' muted weight='medium'>
-                  Category
-                </AppText>
-                {contextError ? (
-                  <View
-                    className='gap-2 rounded-2xl p-3'
-                    style={{ backgroundColor: c.expenseSoft }}
-                  >
-                    <AppText size='sm'>
-                      Couldn&apos;t load your categories.
-                    </AppText>
-                    <View className='flex-row gap-2'>
-                      <Button
-                        label='Try again'
-                        variant='secondary'
-                        onPress={() => loadContext()}
-                      />
-                      <Button
-                        label='Continue without category'
-                        variant='ghost'
-                        onPress={() => {
-                          setContinueWithoutCategory(true);
-                          setContextReady(true);
-                          setContextError(false);
-                        }}
-                      />
-                    </View>
-                  </View>
-                ) : contextLoading ? (
-                  <View className='flex-row gap-2'>
-                    {(['a', 'b', 'c', 'd'] as const).map((id) => (
-                      <Skeleton
-                        key={`chip-skel-${id}`}
-                        width={88}
-                        height={44}
-                      />
-                    ))}
-                  </View>
-                ) : categories.length === 0 ? (
-                  <View className='gap-2'>
-                    <AppText size='sm' muted>
-                      No categories yet
-                    </AppText>
-                    <Button
-                      label='Add category'
-                      variant='secondary'
-                      onPress={() => {
-                        onClose();
-                        router.push('/categories' as Href);
-                      }}
-                    />
-                  </View>
-                ) : (
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                    <View className='flex-row gap-2'>
-                      {orderedCategories.map((cat) => {
-                        const selected = categoryId === cat.id;
-                        return (
-                          <Pressable
-                            key={cat.id}
-                            onPress={() => setValue('categoryId', cat.id)}
-                            className='flex-row items-center gap-2 rounded-full px-3'
-                            style={{
-                              minHeight: Math.max(44, scale(44)),
-                              backgroundColor: selected
-                                ? c.accentSoft
-                                : c.surfaceHigh,
-                              borderWidth: selected ? 1 : 0,
-                              borderColor: selected ? c.accent : 'transparent',
-                            }}
-                            accessibilityRole='button'
-                            accessibilityState={{ selected }}
-                            accessibilityLabel={cat.name}
-                          >
-                            <CategoryGlyph
-                              iconKey={cat.iconKey}
-                              color={cat.color}
-                              size={28}
-                            />
-                            <AppText size='sm' weight='medium'>
-                              {cat.name}
-                            </AppText>
-                            {selected ? (
-                              <Ionicons
-                                name='checkmark'
-                                size={scale(16)}
-                                color={c.accent}
-                              />
-                            ) : null}
-                          </Pressable>
-                        );
-                      })}
-                      <Pressable
-                        onPress={() => setAllCategoriesOpen(true)}
-                        className='items-center justify-center rounded-full px-4'
-                        style={{
-                          minHeight: Math.max(44, scale(44)),
-                          backgroundColor: c.surfaceHigh,
-                        }}
-                        accessibilityRole='button'
-                        accessibilityLabel='All categories'
-                      >
-                        <AppText size='sm' weight='medium'>
-                          All categories
-                        </AppText>
-                      </Pressable>
-                    </View>
-                  </ScrollView>
-                )}
-              </View>
-            ) : null}
-
-            {mode === 'transfer' ? (
-              <View className='gap-3'>
-                <Controller
-                  control={control}
-                  name='accountId'
-                  render={({ field: { value, onChange } }) => (
-                    <Select
-                      label='From account'
-                      value={value}
-                      onChange={(v) => {
-                        userPickedAccountRef.current = true;
-                        onChange(v);
-                      }}
-                      options={accounts.map((a) => ({
-                        label: `${a.name} · ${a.currencyCode}`,
-                        value: a.id,
-                      }))}
-                      error={errors.accountId?.message}
-                    />
-                  )}
-                />
-                <Controller
-                  control={control}
-                  name='toAccountId'
-                  render={({ field: { value, onChange } }) => (
-                    <Select
-                      label='To account'
-                      value={value}
-                      onChange={onChange}
-                      options={accounts
-                        .filter((a) => a.id !== accountId)
-                        .map((a) => ({
-                          label: `${a.name} · ${a.currencyCode}`,
-                          value: a.id,
-                        }))}
-                      placeholder='Select destination'
-                      error={errors.toAccountId?.message}
-                    />
-                  )}
-                />
-                <Controller
-                  control={control}
-                  name='date'
-                  render={({ field: { value, onChange } }) => (
-                    <Field
-                      label='Date'
-                      value={value}
-                      onChangeText={onChange}
-                      placeholder='YYYY-MM-DD'
-                      error={errors.date?.message}
-                      onFocus={() => setKeypadVisible(false)}
-                    />
-                  )}
-                />
-                <Controller
-                  control={control}
-                  name='title'
-                  render={({ field: { value, onChange, ref } }) => (
-                    <Field
-                      ref={ref}
-                      label='Title (optional)'
-                      value={value}
-                      onChangeText={onChange}
-                      placeholder='Transfer'
-                      error={errors.title?.message}
-                      onFocus={() => setKeypadVisible(false)}
-                    />
-                  )}
-                />
-                <Field
-                  label='Note'
-                  value={watch('note') ?? ''}
-                  onChangeText={(t) => setValue('note', t)}
-                  placeholder='Optional note'
-                  multiline
-                  onFocus={() => setKeypadVisible(false)}
-                />
-              </View>
-            ) : (
-              <SurfaceCard padded={false}>
-                <ListRow
-                  title={mode === 'income' ? 'Deposit to' : 'Paid from'}
-                  subtitle={
-                    account
-                      ? `${account.name} · ${account.currencyCode}${
-                          accountBalance != null
-                            ? ` · ${formatMoney(accountBalance, account.currencyCode)}`
-                            : ''
-                        }`
-                      : undefined
-                  }
-                  onPress={() => setAccountPickerOpen(true)}
-                  right={
-                    <Ionicons
-                      name='chevron-forward'
-                      size={scale(18)}
-                      color={c.inkMuted}
-                    />
-                  }
-                />
-                <ListRow
-                  title='Date'
-                  subtitle={formatQuickAddDateLabel(dateValue, new Date())}
-                  onPress={() => setDatePickerOpen(true)}
-                  right={
-                    <Ionicons
-                      name='chevron-forward'
-                      size={scale(18)}
-                      color={c.inkMuted}
-                    />
-                  }
-                />
-                <View className='px-4 py-2'>
-                  <Controller
-                    control={control}
-                    name='title'
-                    render={({ field: { value, onChange, ref } }) => (
-                      <Field
-                        ref={ref}
-                        value={value}
-                        onChangeText={onChange}
-                        placeholder='Where or what? (optional)'
-                        error={errors.title?.message}
-                        onFocus={() => setKeypadVisible(false)}
-                      />
-                    )}
-                  />
-                  {lastCategoryTitle ? (
-                    <Pressable
-                      onPress={() => setValue('title', lastCategoryTitle)}
-                      className='mt-2 self-start rounded-full px-3 py-2'
-                      style={{
-                        backgroundColor: c.surfaceHigh,
-                        minHeight: Math.max(44, scale(36)),
-                      }}
-                      accessibilityRole='button'
-                      accessibilityLabel={`Last time: ${lastCategoryTitle}`}
-                    >
-                      <AppText size='sm' muted>
-                        Last time: {lastCategoryTitle}
-                      </AppText>
-                    </Pressable>
-                  ) : null}
-                </View>
+          ) : (
+            <>
+              <View className='mb-2 flex-row items-start gap-3'>
                 <Pressable
-                  onPress={() => setMoreDetailsOpen((o) => !o)}
-                  className='flex-row items-center justify-between px-4 py-3.5'
-                  style={{ borderTopWidth: 1, borderTopColor: c.line }}
+                  onPress={() => setAccountPickerOpen(true)}
+                  className='rounded-full px-3 py-2'
+                  style={{
+                    backgroundColor: c.surfaceHigh,
+                    minHeight: Math.max(44, scale(44)),
+                    justifyContent: 'center',
+                  }}
                   accessibilityRole='button'
-                  accessibilityLabel='More details'
+                  accessibilityLabel={`Currency ${currency}, from ${account?.name ?? 'account'}. Double tap to change account`}
                 >
-                  <AppText size='base' weight='medium'>
-                    More details
+                  <AppText size='sm' weight='semibold' numeric>
+                    {currency}
                   </AppText>
-                  <Ionicons
-                    name={moreDetailsOpen ? 'chevron-up' : 'chevron-down'}
-                    size={scale(18)}
-                    color={c.inkMuted}
-                  />
                 </Pressable>
-                {moreDetailsOpen ? (
-                  <View className='gap-3 px-4 pb-4'>
-                    <Controller
-                      control={control}
-                      name='note'
-                      render={({ field: { value, onChange, ref } }) => (
-                        <Field
-                          ref={ref}
-                          label='Note'
-                          value={value}
-                          onChangeText={onChange}
-                          placeholder='Optional note'
-                          multiline
-                          error={errors.note?.message}
-                          onFocus={() => setKeypadVisible(false)}
-                        />
-                      )}
+                <View className='flex-1'>
+                  <AmountDisplay
+                    amountText={amountText}
+                    currencyCode={currency}
+                    locale={locale}
+                    onPress={() => {
+                      setKeypadVisible(true);
+                      Keyboard.dismiss();
+                    }}
+                    errorMessage={
+                      errors.amount?.message ||
+                      (amountHelper ? amountHelper : undefined)
+                    }
+                  />
+                </View>
+              </View>
+
+              <ScrollView
+                ref={scrollRef}
+                className='flex-1'
+                keyboardShouldPersistTaps='handled'
+                keyboardDismissMode='on-drag'
+                contentContainerStyle={{ gap: 14, paddingBottom: 12 }}
+              >
+                {repeatLastLabel ? (
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                    <Chip
+                      label={repeatLastLabel}
+                      icon='repeat-outline'
+                      onPress={onRepeatLast}
                     />
-                    <Controller
-                      control={control}
-                      name='tags'
-                      render={({ field: { value, onChange, ref } }) => (
-                        <Field
-                          ref={ref}
-                          label='Tags'
-                          value={value}
-                          onChangeText={onChange}
-                          placeholder='e.g. trip, work'
-                          error={errors.tags?.message}
-                          onFocus={() => setKeypadVisible(false)}
-                        />
-                      )}
-                    />
-                    <View className='gap-2'>
-                      <AppText size='sm' muted weight='medium'>
-                        Receipts
-                      </AppText>
-                      <View className='flex-row gap-2'>
-                        <View className='flex-1'>
+                  </ScrollView>
+                ) : null}
+
+                {mode !== 'transfer' ? (
+                  <View className='gap-2'>
+                    <AppText size='sm' muted weight='medium'>
+                      Category
+                    </AppText>
+                    {contextError ? (
+                      <View
+                        className='gap-2 rounded-2xl p-3'
+                        style={{ backgroundColor: c.expenseSoft }}
+                      >
+                        <AppText size='sm'>
+                          Couldn&apos;t load your categories.
+                        </AppText>
+                        <View className='flex-row gap-2'>
                           <Button
-                            label='Gallery'
+                            label='Try again'
                             variant='secondary'
-                            icon='images-outline'
-                            onPress={onPickReceipts}
+                            onPress={() => void loadContext('refresh')}
                           />
-                        </View>
-                        <View className='flex-1'>
                           <Button
-                            label='Camera'
-                            variant='secondary'
-                            icon='camera-outline'
-                            onPress={onTakeReceipt}
+                            label='Continue without category'
+                            variant='ghost'
+                            onPress={() => {
+                              setContinueWithoutCategory(true);
+                              setContextReady(true);
+                              setContextError(false);
+                            }}
                           />
                         </View>
                       </View>
-                      {pendingImages.length ? (
-                        <ScrollView
-                          horizontal
-                          showsHorizontalScrollIndicator={false}
-                        >
-                          <View className='flex-row gap-2'>
-                            {pendingImages.map((path) => (
-                              <ReceiptThumb
-                                key={path}
-                                path={path}
-                                onPress={() =>
-                                  setPendingImages((prev) =>
-                                    prev.filter((p) => p !== path)
-                                  )
-                                }
-                              />
-                            ))}
-                          </View>
-                        </ScrollView>
-                      ) : null}
-                    </View>
+                    ) : contextLoading ? (
+                      <View className='flex-row gap-2'>
+                        {(['a', 'b', 'c', 'd'] as const).map((id) => (
+                          <Skeleton
+                            key={`chip-skel-${id}`}
+                            width={88}
+                            height={44}
+                          />
+                        ))}
+                      </View>
+                    ) : categories.length === 0 ? (
+                      <View className='gap-2'>
+                        <AppText size='sm' muted>
+                          No categories yet
+                        </AppText>
+                        <Button
+                          label='Add category'
+                          variant='secondary'
+                          onPress={() => {
+                            onClose();
+                            router.push('/categories' as Href);
+                          }}
+                        />
+                      </View>
+                    ) : (
+                      <ScrollView
+                        ref={categoryScrollRef}
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                      >
+                        <View className='flex-row gap-2'>
+                          {orderedCategories.map((cat) => {
+                            const selected = categoryId === cat.id;
+                            return (
+                              <Pressable
+                                key={cat.id}
+                                onPress={() => void selectCategory(cat.id)}
+                                className='flex-row items-center gap-2 rounded-full px-3'
+                                style={{
+                                  minHeight: Math.max(44, scale(44)),
+                                  backgroundColor: selected
+                                    ? c.accentSoft
+                                    : c.surfaceHigh,
+                                  borderWidth: selected ? 1 : 0,
+                                  borderColor: selected
+                                    ? c.accent
+                                    : 'transparent',
+                                }}
+                                accessibilityRole='button'
+                                accessibilityState={{ selected }}
+                                accessibilityLabel={cat.name}
+                              >
+                                <CategoryGlyph
+                                  iconKey={cat.iconKey}
+                                  color={cat.color}
+                                  size={28}
+                                />
+                                <AppText size='sm' weight='medium'>
+                                  {cat.name}
+                                </AppText>
+                                {selected ? (
+                                  <Ionicons
+                                    name='checkmark'
+                                    size={scale(16)}
+                                    color={c.accent}
+                                  />
+                                ) : null}
+                              </Pressable>
+                            );
+                          })}
+                          <Pressable
+                            onPress={() => setAllCategoriesOpen(true)}
+                            className='items-center justify-center rounded-full px-4'
+                            style={{
+                              minHeight: Math.max(44, scale(44)),
+                              backgroundColor: c.surfaceHigh,
+                            }}
+                            accessibilityRole='button'
+                            accessibilityLabel='All categories'
+                          >
+                            <AppText size='sm' weight='medium'>
+                              All categories
+                            </AppText>
+                          </Pressable>
+                        </View>
+                      </ScrollView>
+                    )}
                   </View>
                 ) : null}
-              </SurfaceCard>
-            )}
-          </ScrollView>
 
-          <Controller
-            control={control}
-            name='amount'
-            render={({ field: { value, onChange } }) => (
-              <Keypad
-                visible={keypadVisible}
-                currencyCode={currency}
-                locale={locale}
-                amountText={value}
-                onAmountTextChange={(text) => {
-                  setAmountBlocked(false);
-                  onChange(text);
-                }}
-                onBlockedPress={() => setAmountBlocked(true)}
-              />
-            )}
-          />
+                {mode === 'transfer' ? (
+                  <View className='gap-3'>
+                    <Controller
+                      control={control}
+                      name='accountId'
+                      render={({ field: { value, onChange } }) => (
+                        <Select
+                          label='From account'
+                          value={value}
+                          onChange={(v) => {
+                            userPickedAccountRef.current = true;
+                            onChange(v);
+                          }}
+                          options={accounts.map((a) => ({
+                            label: `${a.name} · ${a.currencyCode}`,
+                            value: a.id,
+                          }))}
+                          error={errors.accountId?.message}
+                        />
+                      )}
+                    />
+                    <Controller
+                      control={control}
+                      name='toAccountId'
+                      render={({ field: { value, onChange } }) => (
+                        <Select
+                          label='To account'
+                          value={value}
+                          onChange={onChange}
+                          options={accounts
+                            .filter((a) => a.id !== accountId)
+                            .map((a) => ({
+                              label: `${a.name} · ${a.currencyCode}`,
+                              value: a.id,
+                            }))}
+                          placeholder='Select destination'
+                          error={errors.toAccountId?.message}
+                        />
+                      )}
+                    />
+                    <Controller
+                      control={control}
+                      name='date'
+                      render={({ field: { value, onChange } }) => (
+                        <Field
+                          label='Date'
+                          value={value}
+                          onChangeText={onChange}
+                          placeholder='YYYY-MM-DD'
+                          error={errors.date?.message}
+                          onFocus={() => setKeypadVisible(false)}
+                        />
+                      )}
+                    />
+                    <Controller
+                      control={control}
+                      name='title'
+                      render={({ field: { value, onChange, ref } }) => (
+                        <Field
+                          ref={ref}
+                          label='Title (optional)'
+                          value={value}
+                          onChangeText={onChange}
+                          placeholder='Transfer'
+                          error={errors.title?.message}
+                          onFocus={() => setKeypadVisible(false)}
+                        />
+                      )}
+                    />
+                    <Field
+                      label='Note'
+                      value={watch('note') ?? ''}
+                      onChangeText={(t) => setValue('note', t)}
+                      placeholder='Optional note'
+                      multiline
+                      onFocus={() => setKeypadVisible(false)}
+                    />
+                  </View>
+                ) : (
+                  <SurfaceCard padded={false}>
+                    <ListRow
+                      title={mode === 'income' ? 'Deposit to' : 'Paid from'}
+                      subtitle={
+                        account
+                          ? `${account.name} · ${account.currencyCode}${
+                              accountBalance != null
+                                ? ` · ${formatMoney(accountBalance, account.currencyCode)}`
+                                : ''
+                            }`
+                          : undefined
+                      }
+                      onPress={() => setAccountPickerOpen(true)}
+                      right={
+                        <Ionicons
+                          name='chevron-forward'
+                          size={scale(18)}
+                          color={c.inkMuted}
+                        />
+                      }
+                    />
+                    <ListRow
+                      title='Date'
+                      subtitle={formatQuickAddDateLabel(dateValue, new Date())}
+                      onPress={() => setDatePickerOpen(true)}
+                      right={
+                        <Ionicons
+                          name='chevron-forward'
+                          size={scale(18)}
+                          color={c.inkMuted}
+                        />
+                      }
+                    />
+                    <View className='px-4 py-2'>
+                      <Controller
+                        control={control}
+                        name='title'
+                        render={({ field: { value, onChange, ref } }) => (
+                          <Field
+                            ref={ref}
+                            value={value}
+                            onChangeText={onChange}
+                            placeholder='Where or what? (optional)'
+                            error={errors.title?.message}
+                            onFocus={() => setKeypadVisible(false)}
+                          />
+                        )}
+                      />
+                      {lastCategoryTitle ? (
+                        <Pressable
+                          onPress={() => setValue('title', lastCategoryTitle)}
+                          className='mt-2 self-start rounded-full px-3 py-2'
+                          style={{
+                            backgroundColor: c.surfaceHigh,
+                            minHeight: Math.max(44, scale(36)),
+                          }}
+                          accessibilityRole='button'
+                          accessibilityLabel={`Last time: ${lastCategoryTitle}`}
+                        >
+                          <AppText size='sm' muted>
+                            Last time: {lastCategoryTitle}
+                          </AppText>
+                        </Pressable>
+                      ) : null}
+                    </View>
+                    <Pressable
+                      onPress={() => setMoreDetailsOpen((o) => !o)}
+                      className='flex-row items-center justify-between px-4 py-3.5'
+                      style={{ borderTopWidth: 1, borderTopColor: c.line }}
+                      accessibilityRole='button'
+                      accessibilityLabel='More details'
+                    >
+                      <AppText size='base' weight='medium'>
+                        More details
+                      </AppText>
+                      <Ionicons
+                        name={moreDetailsOpen ? 'chevron-up' : 'chevron-down'}
+                        size={scale(18)}
+                        color={c.inkMuted}
+                      />
+                    </Pressable>
+                    {moreDetailsOpen ? (
+                      <View className='gap-3 px-4 pb-4'>
+                        <Controller
+                          control={control}
+                          name='note'
+                          render={({ field: { value, onChange, ref } }) => (
+                            <Field
+                              ref={ref}
+                              label='Note'
+                              value={value}
+                              onChangeText={onChange}
+                              placeholder='Optional note'
+                              multiline
+                              error={errors.note?.message}
+                              onFocus={() => setKeypadVisible(false)}
+                            />
+                          )}
+                        />
+                        <Controller
+                          control={control}
+                          name='tags'
+                          render={({ field: { value, onChange, ref } }) => (
+                            <Field
+                              ref={ref}
+                              label='Tags'
+                              value={value}
+                              onChangeText={onChange}
+                              placeholder='e.g. trip, work'
+                              error={errors.tags?.message}
+                              onFocus={() => setKeypadVisible(false)}
+                            />
+                          )}
+                        />
+                        <View className='gap-2'>
+                          <AppText size='sm' muted weight='medium'>
+                            Receipts
+                          </AppText>
+                          <View className='flex-row gap-2'>
+                            <View className='flex-1'>
+                              <Button
+                                label='Gallery'
+                                variant='secondary'
+                                icon='images-outline'
+                                onPress={onPickReceipts}
+                              />
+                            </View>
+                            <View className='flex-1'>
+                              <Button
+                                label='Camera'
+                                variant='secondary'
+                                icon='camera-outline'
+                                onPress={onTakeReceipt}
+                              />
+                            </View>
+                          </View>
+                          {pendingImages.length ? (
+                            <ScrollView
+                              horizontal
+                              showsHorizontalScrollIndicator={false}
+                            >
+                              <View className='flex-row gap-2'>
+                                {pendingImages.map((path) => (
+                                  <ReceiptThumb
+                                    key={path}
+                                    path={path}
+                                    onPress={() =>
+                                      setPendingImages((prev) =>
+                                        prev.filter((p) => p !== path)
+                                      )
+                                    }
+                                  />
+                                ))}
+                              </View>
+                            </ScrollView>
+                          ) : null}
+                        </View>
+                      </View>
+                    ) : null}
+                  </SurfaceCard>
+                )}
+              </ScrollView>
 
-          <View className='mt-2 flex-row items-center gap-2'>
-            <Button
-              label='Save & new'
-              variant='secondary'
-              onPress={() => {
-                setSaveMode('saveNew');
-                runSave();
-              }}
-              disabled={saveDisabled}
-              loading={saving && saveMode === 'saveNew'}
-              className='w-[110px]'
-            />
-            <View className='flex-1'>
-              <Button
-                label='Save'
-                prominent
-                onPress={() => {
-                  setSaveMode('save');
-                  runSave();
-                }}
-                disabled={saveDisabled}
-                loading={saving && saveMode === 'save'}
+              <Controller
+                control={control}
+                name='amount'
+                render={({ field: { value, onChange } }) => (
+                  <Keypad
+                    visible={keypadVisible}
+                    currencyCode={currency}
+                    locale={locale}
+                    amountText={value}
+                    onAmountTextChange={(text) => {
+                      setAmountBlocked(false);
+                      setAmountTouched(true);
+                      onChange(text);
+                    }}
+                    onBlockedPress={() => setAmountBlocked(true)}
+                  />
+                )}
               />
-            </View>
-          </View>
+
+              <View className='mt-2 flex-row items-center gap-2'>
+                <Button
+                  label='Save & new'
+                  variant='secondary'
+                  onPress={() => runSave('saveNew')}
+                  disabled={saveDisabled}
+                  loading={saving && activeSaveMode === 'saveNew'}
+                  className='w-[110px]'
+                />
+                <View className='flex-1'>
+                  <Button
+                    label='Save'
+                    prominent
+                    onPress={() => runSave('save')}
+                    disabled={saveDisabled}
+                    loading={saving && activeSaveMode === 'save'}
+                  />
+                </View>
+              </View>
+            </>
+          )}
         </>
       )}
 
@@ -1098,7 +1227,9 @@ function AddTransactionSheetBody({
         value={dateValue}
         now={new Date()}
         onClose={() => setDatePickerOpen(false)}
-        onChange={(d) => setValue('date', d)}
+        onChange={(d) => {
+          setValue('date', d);
+        }}
       />
 
       <Modal visible={accountPickerOpen} transparent animationType='fade'>
@@ -1124,6 +1255,7 @@ function AddTransactionSheetBody({
                     setValue('accountId', item.id);
                     setAccountPickerOpen(false);
                   }}
+                  accessibilityRole='button'
                   className='py-3.5'
                   style={{ minHeight: Math.max(44, scale(44)) }}
                 >
@@ -1156,9 +1288,10 @@ function AddTransactionSheetBody({
               renderItem={({ item }) => (
                 <Pressable
                   onPress={() => {
-                    setValue('categoryId', item.id);
+                    void selectCategory(item.id);
                     setAllCategoriesOpen(false);
                   }}
+                  accessibilityRole='button'
                   className='flex-row items-center gap-3 py-3.5'
                   style={{ minHeight: Math.max(44, scale(44)) }}
                 >
