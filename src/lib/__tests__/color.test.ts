@@ -1,5 +1,11 @@
 import { palette } from '@/constants/palette';
-import { contrastRatio, ensureContrast, withAlpha } from '@/lib/color';
+import {
+  contrastRatio,
+  ensureContrast,
+  isHexColor,
+  safeCategoryHex,
+  withAlpha,
+} from '@/lib/color';
 
 const DARK_CARD = palette.dark.surfaceRaised;
 const LIGHT_CARD = palette.light.surfaceRaised;
@@ -57,7 +63,7 @@ describe('ensureContrast', () => {
 
       expect(fg).not.toBeNull();
       expect(bg).not.toBeNull();
-      if (!fg || !bg) return;
+      if (!fg || !bg) throw new Error('expected fg and bg rgb');
 
       const ratio = contrastRatio(fg, bg);
       expect(ratio).toBeGreaterThanOrEqual(MIN_RATIO);
@@ -70,7 +76,7 @@ describe('ensureContrast', () => {
 
       expect(fg).not.toBeNull();
       expect(bg).not.toBeNull();
-      if (!fg || !bg) return;
+      if (!fg || !bg) throw new Error('expected fg and bg rgb');
 
       const ratio = contrastRatio(fg, bg);
       expect(ratio).toBeGreaterThanOrEqual(TEXT_RATIO);
@@ -83,7 +89,7 @@ describe('ensureContrast', () => {
 
       expect(fg).not.toBeNull();
       expect(bg).not.toBeNull();
-      if (!fg || !bg) return;
+      if (!fg || !bg) throw new Error('expected fg and bg rgb');
 
       const ratio = contrastRatio(fg, bg);
       expect(ratio).toBeGreaterThanOrEqual(MIN_RATIO);
@@ -108,7 +114,7 @@ describe('ensureContrast', () => {
 
         expect(fg).not.toBeNull();
         expect(bg).not.toBeNull();
-        if (!fg || !bg) return;
+        if (!fg || !bg) throw new Error('expected fg and bg rgb');
 
         const ratio = contrastRatio(fg, bg);
         expect(ratio).toBeGreaterThanOrEqual(MIN_RATIO);
@@ -124,7 +130,7 @@ describe('ensureContrast', () => {
 
       const fg = hexToRgb(adjusted);
       const bg = hexToRgb(DARK_CARD);
-      if (!fg || !bg) return;
+      if (!fg || !bg) throw new Error('expected fg and bg rgb');
 
       const ratio = contrastRatio(fg, bg);
       expect(ratio).toBeGreaterThanOrEqual(MIN_RATIO);
@@ -162,7 +168,7 @@ describe('ensureContrast', () => {
 
       expect(fg).not.toBeNull();
       expect(bg).not.toBeNull();
-      if (!fg || !bg) return;
+      if (!fg || !bg) throw new Error('expected fg and bg rgb');
 
       const ratio = contrastRatio(fg, bg);
       expect(ratio).toBeGreaterThanOrEqual(MIN_RATIO);
@@ -220,7 +226,7 @@ describe('ensureContrast', () => {
 
           expect(fg).not.toBeNull();
           expect(bg).not.toBeNull();
-          if (!fg || !bg) return;
+          if (!fg || !bg) throw new Error('expected fg and bg rgb');
 
           const ratio = contrastRatio(fg, bg);
           expect(ratio).toBeGreaterThanOrEqual(MIN_RATIO);
@@ -236,7 +242,7 @@ describe('ensureContrast', () => {
 
           expect(fg).not.toBeNull();
           expect(bg).not.toBeNull();
-          if (!fg || !bg) return;
+          if (!fg || !bg) throw new Error('expected fg and bg rgb');
 
           const ratio = contrastRatio(fg, bg);
           expect(ratio).toBeGreaterThanOrEqual(MIN_RATIO);
@@ -254,7 +260,7 @@ describe('ensureContrast', () => {
 
           expect(fg).not.toBeNull();
           expect(bg).not.toBeNull();
-          if (!fg || !bg) return;
+          if (!fg || !bg) throw new Error('expected fg and bg rgb');
 
           const ratio = contrastRatio(fg, bg);
           expect(ratio).toBeGreaterThanOrEqual(TEXT_RATIO);
@@ -270,7 +276,7 @@ describe('ensureContrast', () => {
 
           expect(fg).not.toBeNull();
           expect(bg).not.toBeNull();
-          if (!fg || !bg) return;
+          if (!fg || !bg) throw new Error('expected fg and bg rgb');
 
           const ratio = contrastRatio(fg, bg);
           expect(ratio).toBeGreaterThanOrEqual(TEXT_RATIO);
@@ -286,7 +292,7 @@ describe('ensureContrast', () => {
     const result = ensureContrast(black, white, TEXT_RATIO);
     const fg = hexToRgb(result);
     const bg = hexToRgb(white);
-    if (!fg || !bg) return;
+    if (!fg || !bg) throw new Error('expected fg and bg rgb');
     expect(contrastRatio(fg, bg)).toBeGreaterThan(TEXT_RATIO);
   });
 
@@ -331,6 +337,39 @@ describe('withAlpha', () => {
   it('preserves uppercase in result', () => {
     const result = withAlpha('#6a4c93', '22');
     expect(result).toBe('#6A4C9322');
+  });
+
+  it('throws on malformed hex lengths', () => {
+    expect(() => withAlpha('#ABCD', '22')).toThrow(/3, 6, or 8 hex digits/);
+    expect(() => withAlpha('', '22')).toThrow(/3, 6, or 8 hex digits/);
+  });
+
+  it('throws when hex digits are not valid', () => {
+    expect(() => withAlpha('#GGGGGG', '22')).toThrow(/0-9 or A-F/);
+  });
+});
+
+describe('safeCategoryHex', () => {
+  const fallback = '#6B7280';
+
+  it.each([
+    ['', fallback],
+    ['rgb(10,20,30)', fallback],
+    ['transparent', fallback],
+    ['#12345', fallback],
+    [undefined, fallback],
+  ] as const)('returns fallback for %s', (input, expected) => {
+    expect(safeCategoryHex(input)).toBe(expected);
+  });
+
+  it('passes valid hex through', () => {
+    expect(safeCategoryHex('#6A4C93')).toBe('#6A4C93');
+    expect(safeCategoryHex('ABC')).toBe('#ABC');
+  });
+
+  it('isHexColor matches safeCategoryHex acceptance', () => {
+    expect(isHexColor('#FF5733')).toBe(true);
+    expect(isHexColor('#12345')).toBe(false);
   });
 });
 

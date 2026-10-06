@@ -22,7 +22,7 @@ import Svg, { Circle } from 'react-native-svg';
 
 import { colors } from '@/constants/palette';
 import { resolveCategoryIcon } from '@/lib/categories/icons';
-import { ensureContrast, withAlpha } from '@/lib/color';
+import { ensureContrast, safeCategoryHex, withAlpha } from '@/lib/color';
 import { fontSize, scale, vs } from '@/lib/layout';
 import { useApp } from '@/providers/app-provider';
 
@@ -286,7 +286,7 @@ export function ScreenHeader({
 export const Field = forwardRef<
   TextInput,
   TextInputProps & { label?: string; error?: string }
->(function Field({ label, error, ...props }, ref) {
+>(function Field({ label, error, style, ...props }, ref) {
   const { colorScheme } = useApp();
   const c = useThemeColors();
   const bg =
@@ -304,13 +304,16 @@ export const Field = forwardRef<
         ref={ref}
         placeholderTextColor={c.inkMuted}
         className={`rounded-2xl px-4 py-3.5 ${bg}`}
-        style={{
-          color: c.ink,
-          fontSize: fontSize(15),
-          minHeight: Math.max(44, vs(48)),
-          borderWidth: 1,
-          borderColor,
-        }}
+        style={[
+          {
+            color: c.ink,
+            fontSize: fontSize(15),
+            minHeight: Math.max(44, vs(48)),
+            borderWidth: 1,
+            borderColor,
+          },
+          style,
+        ]}
         {...props}
       />
       {error ? (
@@ -502,7 +505,8 @@ export function CategoryGlyph({
 }) {
   const c = useThemeColors();
   const dim = scale(size);
-  const adjustedColor = ensureContrast(color, c.surfaceRaised, 3);
+  const hex = safeCategoryHex(color);
+  const adjustedColor = ensureContrast(hex, c.surfaceRaised, 3);
 
   return (
     <View
