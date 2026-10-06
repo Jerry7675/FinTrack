@@ -1,4 +1,10 @@
 import { OpenRouter } from '@openrouter/sdk';
+import {
+  OpenRouterError,
+  PaymentRequiredResponseError,
+  TooManyRequestsResponseError,
+} from '@openrouter/sdk/models/errors';
+import type { SendChatCompletionRequestResponse } from '@openrouter/sdk/models/operations';
 
 import {
   getOpenRouterModel,
@@ -15,30 +21,40 @@ export type ExtractResult =
 
 export type OpenRouterClient = {
   chat: {
-    send: (args: Record<string, unknown>) => Promise<unknown>;
+    send: OpenRouter['chat']['send'];
   };
 };
 
 export function createOpenRouterClient(apiKey: string): OpenRouterClient {
-  return new OpenRouter({ apiKey }) as unknown as OpenRouterClient;
+  return new OpenRouter({ apiKey });
 }
 
 function getRetryAfterSec(error: unknown): number | undefined {
-  if (error && typeof error === 'object' && 'headers' in error) {
-    const headers = (error as { headers?: Record<string, string> }).headers;
-    const raw = headers?.['retry-after'] ?? headers?.['Retry-After'];
-    if (raw) {
-      const sec = Number.parseInt(String(raw), 10);
-      if (Number.isFinite(sec)) {
-        return Math.min(600, Math.max(1, sec));
-      }
-    }
+  if (!(error instanceof OpenRouterError)) {
+    return undefined;
   }
-  return undefined;
+  const raw = error.headers.get('retry-after');
+  if (!raw) {
+    return undefined;
+  }
+  const sec = Number.parseInt(raw, 10);
+  if (!Number.isFinite(sec)) {
+    return undefined;
+  }
+  return Math.min(600, Math.max(1, sec));
 }
 
-function isRateOrCreditError(status: number): boolean {
-  return status === 429 || status === 402;
+function isProviderRateLimitError(error: unknown): boolean {
+  if (
+    error instanceof TooManyRequestsResponseError ||
+    error instanceof PaymentRequiredResponseError
+  ) {
+    return true;
+  }
+  return (
+    error instanceof OpenRouterError &&
+    (error.statusCode === 429 || error.statusCode === 402)
+  );
 }
 
 export async function extractReceiptFields(
@@ -46,32 +62,33 @@ export async function extractReceiptFields(
   client: OpenRouterClient,
   model = getOpenRouterModel()
 ): Promise<ExtractResult> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), PROVIDER_TIMEOUT_MS);
-
   try {
-    const response = await client.chat.send({
-      model,
-      messages: [
-        { role: 'system', content: buildSystemPrompt() },
-        {
-          role: 'user',
-          content: [
-            { type: 'text', text: buildUserPrompt() },
+    const response = await client.chat.send(
+      {
+        chatRequest: {
+          model,
+          messages: [
+            { role: 'system', content: buildSystemPrompt() },
             {
-              type: 'image_url',
-              image_url: {
-                url: `data:image/jpeg;base64,${imageBase64}`,
-              },
+              role: 'user',
+              content: [
+                { type: 'text', text: buildUserPrompt() },
+                {
+                  type: 'image_url',
+                  imageUrl: {
+                    url: `data:image/jpeg;base64,${imageBase64}`,
+                  },
+                },
+              ],
             },
           ],
+          temperature: PROVIDER_TEMPERATURE,
+          maxTokens: PROVIDER_MAX_TOKENS,
+          responseFormat: { type: 'json_object' },
         },
-      ],
-      temperature: PROVIDER_TEMPERATURE,
-      max_tokens: PROVIDER_MAX_TOKENS,
-      response_format: { type: 'json_object' },
-      signal: controller.signal,
-    });
+      },
+      { timeoutMs: PROVIDER_TIMEOUT_MS }
+    );
 
     const content = extractTextContent(response);
     if (!content) {
@@ -79,15 +96,7 @@ export async function extractReceiptFields(
     }
     return { ok: true, content };
   } catch (error) {
-    const status =
-      error &&
-      typeof error === 'object' &&
-      'status' in error &&
-      typeof (error as { status: unknown }).status === 'number'
-        ? (error as { status: number }).status
-        : 0;
-
-    if (isRateOrCreditError(status)) {
+    if (isProviderRateLimitError(error)) {
       return {
         ok: false,
         kind: 'provider_rate_limited',
@@ -95,31 +104,26 @@ export async function extractReceiptFields(
       };
     }
     return { ok: false, kind: 'provider_error' };
-  } finally {
-    clearTimeout(timer);
   }
 }
 
-function extractTextContent(response: unknown): string | null {
-  if (!response || typeof response !== 'object') {
+function extractTextContent(
+  response: SendChatCompletionRequestResponse
+): string | null {
+  if (!('choices' in response)) {
     return null;
   }
-  const choices = (response as { choices?: unknown[] }).choices;
-  const first = choices?.[0];
-  if (!first || typeof first !== 'object') {
-    return null;
-  }
-  const message = (first as { message?: { content?: unknown } }).message;
-  const content = message?.content;
+  const content = response.choices[0]?.message?.content;
   if (typeof content === 'string') {
     return content;
   }
   if (Array.isArray(content)) {
     const textPart = content.find(
-      (p) =>
-        p && typeof p === 'object' && (p as { type?: string }).type === 'text'
-    ) as { text?: string } | undefined;
-    return textPart?.text ?? null;
+      (part) => part.type === 'text' && 'text' in part
+    );
+    if (textPart && 'text' in textPart && typeof textPart.text === 'string') {
+      return textPart.text;
+    }
   }
   return null;
 }

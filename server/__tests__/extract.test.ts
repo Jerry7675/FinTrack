@@ -2,36 +2,84 @@
  * @jest-environment node
  */
 
-import { extractReceiptFields } from '../lib/extract';
+import type { ChatResult } from '@openrouter/sdk/models';
+
+import { extractReceiptFields, type OpenRouterClient } from '../lib/extract';
+import { paymentRequiredError, tooManyRequestsError } from './sdk-errors';
+
+function mockClient(send: OpenRouterClient['chat']['send']): OpenRouterClient {
+  return { chat: { send } };
+}
+
+function chatResult(content: string): ChatResult {
+  return {
+    id: 'id',
+    object: 'chat.completion',
+    created: 0,
+    model: 'test',
+    systemFingerprint: null,
+    choices: [
+      {
+        index: 0,
+        finishReason: 'stop',
+        message: { role: 'assistant', content },
+      },
+    ],
+  };
+}
 
 describe('extractReceiptFields', () => {
-  it('maps OpenRouter 402 to provider_rate_limited', async () => {
-    const client = {
-      chat: {
-        send: jest.fn().mockRejectedValue({ status: 402 }),
-      },
-    };
-    const result = await extractReceiptFields('abc', client);
-    expect(result).toEqual({ ok: false, kind: 'provider_rate_limited' });
+  it('maps PaymentRequiredResponseError (402) to provider_rate_limited', async () => {
+    const send = jest
+      .fn()
+      .mockRejectedValue(
+        paymentRequiredError(60)
+      ) as OpenRouterClient['chat']['send'];
+    const result = await extractReceiptFields('abc', mockClient(send));
+    expect(result).toEqual({
+      ok: false,
+      kind: 'provider_rate_limited',
+      retryAfterSec: 60,
+    });
   });
 
-  it('uses fixed prompts and does not embed client field descriptions', async () => {
-    const send = jest.fn().mockResolvedValue({
-      choices: [{ message: { content: '{}' } }],
+  it('maps TooManyRequestsResponseError (429) to provider_rate_limited', async () => {
+    const send = jest
+      .fn()
+      .mockRejectedValue(
+        tooManyRequestsError(30)
+      ) as OpenRouterClient['chat']['send'];
+    const result = await extractReceiptFields('abc', mockClient(send));
+    expect(result).toEqual({
+      ok: false,
+      kind: 'provider_rate_limited',
+      retryAfterSec: 30,
     });
-    const client = { chat: { send } };
-    await extractReceiptFields('abc', client);
-    const args = send.mock.calls[0]?.[0] as {
-      messages?: { role: string; content: unknown }[];
-    };
-    const system = args.messages?.find((m) => m.role === 'system')?.content;
-    const userText = (
-      args.messages?.find((m) => m.role === 'user')?.content as
-        | { type: string; text?: string }[]
-        | undefined
-    )?.find((p) => p.type === 'text')?.text;
-    expect(String(system)).toContain('categoryHint');
-    expect(String(userText)).not.toContain('client description');
-    expect(String(system)).not.toContain('client description');
+  });
+
+  it('uses typed chatRequest with imageUrl and fixed prompts', async () => {
+    const send = jest
+      .fn()
+      .mockResolvedValue(chatResult('{}')) as OpenRouterClient['chat']['send'];
+    await extractReceiptFields('abc', mockClient(send));
+    expect(send).toHaveBeenCalledTimes(1);
+    const [request, options] = (send as jest.Mock).mock.calls[0] ?? [];
+    expect(request?.chatRequest.maxTokens).toBeDefined();
+    expect(request?.chatRequest.responseFormat).toEqual({
+      type: 'json_object',
+    });
+    expect(options?.timeoutMs).toBeGreaterThan(0);
+    const messages = request?.chatRequest.messages ?? [];
+    const user = messages.find((m: { role: string }) => m.role === 'user');
+    const parts = Array.isArray(user?.content) ? user.content : [];
+    const imagePart = parts.find(
+      (p: { type: string }) => p.type === 'image_url'
+    );
+    expect(
+      imagePart && 'imageUrl' in imagePart && imagePart.imageUrl.url
+    ).toContain('data:image/jpeg;base64,abc');
+    const system = messages.find((m: { role: string }) => m.role === 'system');
+    expect(String(system?.content)).toContain('categoryHint');
+    expect(String(system?.content)).not.toContain('client description');
   });
 });

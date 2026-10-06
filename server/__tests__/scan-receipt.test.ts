@@ -16,7 +16,7 @@ function mockDeps(
   const send = jest.fn();
   const client = { chat: { send } } as OpenRouterClient;
   return {
-    getApiKey: () => 'test-key',
+    getApiKey: (): string | undefined => 'test-key',
     createClient: () => client,
     extract: jest.fn().mockResolvedValue(extractResult),
     send,
