@@ -4,6 +4,7 @@ import {
   type AddTransactionFormValues,
   defaultTransactionDateString,
   getAddTransactionSaveAvailability,
+  occurredAtFromSelectedDate,
   resolveDefaultAccountId,
   resolveTransactionTitle,
   submitAddTransaction,
@@ -12,7 +13,11 @@ import {
 } from '@/features/transactions/submit-add-transaction';
 import { parseAmountToMinor } from '@/lib/money';
 
-const FIXED_NOW = new Date('2024-06-15T12:00:00.000Z');
+function localNoon(year: number, monthIndex: number, day: number): Date {
+  return new Date(year, monthIndex, day, 12, 0, 0, 0);
+}
+
+const FIXED_NOW = localNoon(2024, 5, 15);
 
 const accounts = [
   { id: 'acc-1', currencyCode: 'USD', name: 'Cash' },
@@ -85,15 +90,33 @@ describe('resolveTransactionTitle', () => {
 
 describe('validateTransactionDate', () => {
   it('rejects future dates relative to now', () => {
-    expect(validateTransactionDate('2024-06-16', FIXED_NOW)).toEqual({
+    const tomorrow = defaultTransactionDateString(
+      new Date(
+        FIXED_NOW.getFullYear(),
+        FIXED_NOW.getMonth(),
+        FIXED_NOW.getDate() + 1
+      )
+    );
+    expect(validateTransactionDate(tomorrow, FIXED_NOW)).toEqual({
       type: 'field',
       field: 'date',
       message: 'Date cannot be in the future',
     });
   });
 
+  it('rejects dates before 2000-01-01', () => {
+    expect(validateTransactionDate('1999-12-31', FIXED_NOW)).toEqual({
+      type: 'field',
+      field: 'date',
+      message: 'Date must be on or after 2000-01-01',
+    });
+  });
+
   it('accepts today and past dates', () => {
-    const today = validateTransactionDate('2024-06-15', FIXED_NOW);
+    const today = validateTransactionDate(
+      defaultTransactionDateString(FIXED_NOW),
+      FIXED_NOW
+    );
     expect('occurredAt' in today).toBe(true);
 
     const past = validateTransactionDate('2024-01-01', FIXED_NOW);
@@ -106,6 +129,43 @@ describe('validateTransactionDate', () => {
       field: 'date',
       message: 'Enter a valid date (YYYY-MM-DD)',
     });
+  });
+});
+
+describe('occurredAtFromSelectedDate', () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('uses exactly now when the selected date is today', () => {
+    const now = localNoon(2024, 5, 15);
+    now.setHours(15, 30, 45, 123);
+    jest.setSystemTime(now);
+
+    const result = validateTransactionDate('2024-06-15', now);
+    expect('occurredAt' in result).toBe(true);
+    if ('occurredAt' in result) {
+      expect(result.occurredAt.getTime()).toBe(now.getTime());
+    }
+  });
+
+  it('keeps the selected day with the current time of day for past dates', () => {
+    const now = localNoon(2024, 5, 15);
+    now.setHours(9, 15, 30, 500);
+    jest.setSystemTime(now);
+
+    const occurredAt = occurredAtFromSelectedDate(localNoon(2024, 5, 10), now);
+    expect(occurredAt.getFullYear()).toBe(2024);
+    expect(occurredAt.getMonth()).toBe(5);
+    expect(occurredAt.getDate()).toBe(10);
+    expect(occurredAt.getHours()).toBe(9);
+    expect(occurredAt.getMinutes()).toBe(15);
+    expect(occurredAt.getSeconds()).toBe(30);
+    expect(occurredAt.getMilliseconds()).toBe(500);
   });
 });
 
@@ -251,7 +311,7 @@ describe('submitAddTransaction', () => {
       currencyCode: 'USD',
       title: 'Coffee',
       note: '',
-      occurredAt: expect.any(Date),
+      occurredAt: FIXED_NOW,
       tagNames: [],
     });
   });

@@ -26,12 +26,14 @@ export type AddTransactionField =
   | 'note'
   | 'tags';
 
+export const TRANSACTION_DATE_MIN = '2000-01-01';
+
 export const ADD_TRANSACTION_FIELD_ORDER: AddTransactionField[] = [
   'amount',
   'date',
-  'title',
   'accountId',
   'toAccountId',
+  'title',
   'note',
   'tags',
 ];
@@ -106,6 +108,27 @@ export function parseIsoLocalDate(dateStr: string): Date | null {
   return parsed;
 }
 
+/** Selected calendar day plus the current local time (exactly `now` when date is today). */
+export function occurredAtFromSelectedDate(
+  selectedLocalDate: Date,
+  now: Date
+): Date {
+  const selectedDay = defaultTransactionDateString(selectedLocalDate);
+  const today = defaultTransactionDateString(now);
+  if (selectedDay === today) {
+    return new Date(now.getTime());
+  }
+  return new Date(
+    selectedLocalDate.getFullYear(),
+    selectedLocalDate.getMonth(),
+    selectedLocalDate.getDate(),
+    now.getHours(),
+    now.getMinutes(),
+    now.getSeconds(),
+    now.getMilliseconds()
+  );
+}
+
 export function validateTransactionDate(
   dateStr: string,
   now: Date
@@ -118,8 +141,15 @@ export function validateTransactionDate(
       message: 'Enter a valid date (YYYY-MM-DD)',
     };
   }
-  const today = defaultTransactionDateString(now);
   const entered = defaultTransactionDateString(parsed);
+  if (entered < TRANSACTION_DATE_MIN) {
+    return {
+      type: 'field',
+      field: 'date',
+      message: 'Date must be on or after 2000-01-01',
+    };
+  }
+  const today = defaultTransactionDateString(now);
   if (entered > today) {
     return {
       type: 'field',
@@ -127,7 +157,7 @@ export function validateTransactionDate(
       message: 'Date cannot be in the future',
     };
   }
-  return { occurredAt: parsed };
+  return { occurredAt: occurredAtFromSelectedDate(parsed, now) };
 }
 
 export function resolveDefaultAccountId(
