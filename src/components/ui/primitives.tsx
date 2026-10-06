@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { forwardRef, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -283,11 +283,10 @@ export function ScreenHeader({
   );
 }
 
-export function Field({
-  label,
-  error,
-  ...props
-}: TextInputProps & { label?: string; error?: string }) {
+export const Field = forwardRef<
+  TextInput,
+  TextInputProps & { label?: string; error?: string }
+>(function Field({ label, error, ...props }, ref) {
   const { colorScheme } = useApp();
   const c = useThemeColors();
   const bg =
@@ -302,6 +301,7 @@ export function Field({
         </AppText>
       ) : null}
       <TextInput
+        ref={ref}
         placeholderTextColor={c.inkMuted}
         className={`rounded-2xl px-4 py-3.5 ${bg}`}
         style={{
@@ -320,7 +320,7 @@ export function Field({
       ) : null}
     </View>
   );
-}
+});
 
 export type SelectOption = { label: string; value: string };
 
