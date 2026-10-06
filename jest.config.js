@@ -6,4 +6,7 @@ module.exports = {
   collectCoverageFrom: ['src/**/*.{ts,tsx}', '!src/**/*.d.ts', '!src/app/**/*'],
   setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
   testMatch: ['**/__tests__/**/*.(test|spec).(ts|tsx|js)'],
+  moduleNameMapper: {
+    '^@openrouter/sdk$': '<rootDir>/server/__tests__/mocks/openrouter-sdk.ts',
+  },
 };

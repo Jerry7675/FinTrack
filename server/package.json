@@ -1,0 +1,16 @@
+{
+  "name": "fintrack-receipt-scan-server",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@openrouter/sdk": "^1.4.23",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "~6.0.3"
+  },
+  "scripts": {
+    "type-check": "tsc --noEmit"
+  }
+}
