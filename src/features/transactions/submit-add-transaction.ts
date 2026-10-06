@@ -305,6 +305,13 @@ export function validateAddTransactionInput(
   }
 
   const tagNames = parseTagNames(values.tags);
+  if (tagNames.length > TRANSACTION_LIMITS.tagCountMax) {
+    return {
+      type: 'field',
+      field: 'tags',
+      message: `Use at most ${TRANSACTION_LIMITS.tagCountMax} tags`,
+    };
+  }
   if (tagNames.some((tag) => tag.length > TRANSACTION_LIMITS.tagMax)) {
     return {
       type: 'field',

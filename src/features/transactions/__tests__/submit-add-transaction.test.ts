@@ -285,6 +285,25 @@ describe('validateAddTransactionInput', () => {
       message: 'Title must be 120 characters or fewer',
     });
   });
+
+  it('rejects more than 10 tags', () => {
+    expect(
+      validateAddTransactionInput(
+        {
+          ...baseValues,
+          tags: Array.from({ length: 11 }, (_, i) => `tag${i}`).join(', '),
+        },
+        accounts,
+        'USD',
+        deps.parseAmountToMinor,
+        FIXED_NOW
+      )
+    ).toEqual({
+      type: 'field',
+      field: 'tags',
+      message: 'Use at most 10 tags',
+    });
+  });
 });
 
 describe('submitAddTransaction', () => {

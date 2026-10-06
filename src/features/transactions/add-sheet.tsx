@@ -117,6 +117,13 @@ const formSchema = z
       .split(',')
       .map((t) => t.trim())
       .filter(Boolean);
+    if (tagNames.length > TRANSACTION_LIMITS.tagCountMax) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Use at most ${TRANSACTION_LIMITS.tagCountMax} tags`,
+        path: ['tags'],
+      });
+    }
     if (tagNames.some((tag) => tag.length > TRANSACTION_LIMITS.tagMax)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -320,9 +327,18 @@ function AddTransactionSheetBody({
           setValue('accountId', nextAccount);
 
           if (mode === 'transfer' && accounts.length >= 2) {
-            const other = accounts.find((a) => a.id !== nextAccount);
-            if (other) {
-              setValue('toAccountId', other.id);
+            const preferredTo = last?.toAccountId ?? null;
+            const validPreferredTo =
+              preferredTo &&
+              preferredTo !== nextAccount &&
+              accounts.some((a) => a.id === preferredTo);
+            if (validPreferredTo) {
+              setValue('toAccountId', preferredTo);
+            } else {
+              const other = accounts.find((a) => a.id !== nextAccount);
+              if (other) {
+                setValue('toAccountId', other.id);
+              }
             }
           }
         }
@@ -519,6 +535,15 @@ function AddTransactionSheetBody({
       await deleteLocalImage(path);
     }
   };
+
+  const removePendingReceipt = useCallback(async (path: string) => {
+    try {
+      await deleteLocalImage(path);
+    } catch (e) {
+      console.warn('Failed to delete receipt file', path, e);
+    }
+    setPendingImages((prev) => prev.filter((p) => p !== path));
+  }, []);
 
   const onConfirmDiscard = async () => {
     setDiscardOpen(false);
@@ -1233,9 +1258,7 @@ function AddTransactionSheetBody({
                                     key={path}
                                     path={path}
                                     onPress={() =>
-                                      setPendingImages((prev) =>
-                                        prev.filter((p) => p !== path)
-                                      )
+                                      void removePendingReceipt(path)
                                     }
                                   />
                                 ))}
