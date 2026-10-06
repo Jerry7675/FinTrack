@@ -2,21 +2,29 @@ import { z } from 'zod';
 
 import {
   type AddTransactionFormValues,
+  defaultTransactionDateString,
   getAddTransactionSaveAvailability,
   resolveDefaultAccountId,
+  resolveTransactionTitle,
   submitAddTransaction,
   validateAddTransactionInput,
+  validateTransactionDate,
 } from '@/features/transactions/submit-add-transaction';
 import { parseAmountToMinor } from '@/lib/money';
+
+const FIXED_NOW = new Date('2024-06-15T12:00:00.000Z');
 
 const accounts = [
   { id: 'acc-1', currencyCode: 'USD', name: 'Cash' },
   { id: 'acc-2', currencyCode: 'USD', name: 'Bank' },
 ];
 
+const categories = [{ id: 'cat-1', name: 'Food' }];
+
 const baseValues: AddTransactionFormValues = {
   mode: 'expense',
   amount: '12.50',
+  date: defaultTransactionDateString(FIXED_NOW),
   title: 'Coffee',
   note: '',
   tags: '',
@@ -27,7 +35,9 @@ const baseValues: AddTransactionFormValues = {
 
 const deps = {
   accounts,
+  categories,
   currency: 'USD',
+  now: FIXED_NOW,
   parseAmountToMinor: (amount: string) => parseAmountToMinor(amount, 'USD'),
   createTransaction: jest.fn(),
   createTransfer: jest.fn(),
@@ -61,20 +71,55 @@ describe('getAddTransactionSaveAvailability', () => {
   });
 });
 
+describe('resolveTransactionTitle', () => {
+  it('uses the category name when title is blank', () => {
+    expect(
+      resolveTransactionTitle({ ...baseValues, title: '   ' }, categories)
+    ).toBe('Food');
+  });
+
+  it('keeps a typed title', () => {
+    expect(resolveTransactionTitle(baseValues, categories)).toBe('Coffee');
+  });
+});
+
+describe('validateTransactionDate', () => {
+  it('rejects future dates relative to now', () => {
+    expect(validateTransactionDate('2024-06-16', FIXED_NOW)).toEqual({
+      type: 'field',
+      field: 'date',
+      message: 'Date cannot be in the future',
+    });
+  });
+
+  it('accepts today and past dates', () => {
+    const today = validateTransactionDate('2024-06-15', FIXED_NOW);
+    expect('occurredAt' in today).toBe(true);
+
+    const past = validateTransactionDate('2024-01-01', FIXED_NOW);
+    expect('occurredAt' in past).toBe(true);
+  });
+
+  it('rejects invalid date strings', () => {
+    expect(validateTransactionDate('not-a-date', FIXED_NOW)).toEqual({
+      type: 'field',
+      field: 'date',
+      message: 'Enter a valid date (YYYY-MM-DD)',
+    });
+  });
+});
+
 describe('validateAddTransactionInput', () => {
-  it('requires a non-blank title for expenses', () => {
+  it('allows a blank title for expenses (title resolved at save)', () => {
     expect(
       validateAddTransactionInput(
         { ...baseValues, title: '   ' },
         accounts,
         'USD',
-        deps.parseAmountToMinor
+        deps.parseAmountToMinor,
+        FIXED_NOW
       )
-    ).toEqual({
-      type: 'field',
-      field: 'title',
-      message: 'Add a title',
-    });
+    ).toBeNull();
   });
 
   it('rejects zero and empty amounts', () => {
@@ -83,7 +128,8 @@ describe('validateAddTransactionInput', () => {
         { ...baseValues, amount: '0' },
         accounts,
         'USD',
-        deps.parseAmountToMinor
+        deps.parseAmountToMinor,
+        FIXED_NOW
       )
     ).toEqual({
       type: 'field',
@@ -96,7 +142,8 @@ describe('validateAddTransactionInput', () => {
         { ...baseValues, amount: '' },
         accounts,
         'USD',
-        deps.parseAmountToMinor
+        deps.parseAmountToMinor,
+        FIXED_NOW
       )
     ).toEqual({
       type: 'field',
@@ -115,7 +162,8 @@ describe('validateAddTransactionInput', () => {
         },
         accounts,
         'USD',
-        deps.parseAmountToMinor
+        deps.parseAmountToMinor,
+        FIXED_NOW
       )
     ).toEqual({
       type: 'field',
@@ -132,7 +180,8 @@ describe('validateAddTransactionInput', () => {
         },
         accounts,
         'USD',
-        deps.parseAmountToMinor
+        deps.parseAmountToMinor,
+        FIXED_NOW
       )
     ).toEqual({
       type: 'field',
@@ -147,7 +196,8 @@ describe('validateAddTransactionInput', () => {
         { ...baseValues, title: 'x'.repeat(121) },
         accounts,
         'USD',
-        deps.parseAmountToMinor
+        deps.parseAmountToMinor,
+        FIXED_NOW
       )
     ).toEqual({
       type: 'field',
@@ -201,8 +251,22 @@ describe('submitAddTransaction', () => {
       currencyCode: 'USD',
       title: 'Coffee',
       note: '',
+      occurredAt: expect.any(Date),
       tagNames: [],
     });
+  });
+
+  it('defaults blank title to the selected category name at save time', async () => {
+    const createTransaction = jest.fn().mockResolvedValue('tx-2');
+
+    await submitAddTransaction(
+      { ...baseValues, title: '' },
+      { ...deps, createTransaction }
+    );
+
+    expect(createTransaction).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Food' })
+    );
   });
 
   it('returns the real database error message when createTransaction rejects', async () => {

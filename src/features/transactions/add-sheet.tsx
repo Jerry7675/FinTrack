@@ -33,7 +33,7 @@ import {
   listCategories,
 } from '@/lib/db/queries';
 import type { Category } from '@/lib/db/schema';
-import { layout } from '@/lib/layout';
+import { fontSize, layout } from '@/lib/layout';
 import { persistImage, pickImage, takePhoto } from '@/lib/media';
 import { fromMinorUnits, parseAmountToMinor } from '@/lib/money';
 import { TRANSACTION_LIMITS } from '@/lib/validation';
@@ -41,6 +41,7 @@ import { useApp } from '@/providers/app-provider';
 
 import {
   type AddTransactionField,
+  defaultTransactionDateString,
   firstAddTransactionFieldWithError,
   getAddTransactionSaveAvailability,
   resolveDefaultAccountId,
@@ -57,6 +58,7 @@ const formSchema = z
   .object({
     mode: z.enum(['expense', 'income', 'transfer']),
     amount: z.string().min(1, 'Enter an amount'),
+    date: z.string().min(1, 'Enter a date'),
     title: z
       .string()
       .max(
@@ -128,6 +130,7 @@ function AddTransactionSheetBody({
     defaultValues: {
       mode: 'expense',
       amount: '',
+      date: defaultTransactionDateString(),
       title: '',
       note: '',
       tags: '',
@@ -150,6 +153,7 @@ function AddTransactionSheetBody({
 
   useEffect(() => {
     if (!visible || !ready) return;
+    setValue('date', defaultTransactionDateString());
     const nextId = resolveDefaultAccountId(accounts, settings?.activeAccountId);
     if (nextId) {
       setValue('accountId', nextId);
@@ -223,7 +227,9 @@ function AddTransactionSheetBody({
     try {
       const result = await submitAddTransaction(values, {
         accounts,
+        categories: categories.map((c) => ({ id: c.id, name: c.name })),
         currency,
+        now: new Date(),
         parseAmountToMinor,
         createTransaction: (input) => createTransaction(db, input),
         createTransfer: async (input) => {
@@ -244,6 +250,7 @@ function AddTransactionSheetBody({
             toCurrency: to.currencyCode,
             title: input.title,
             note: input.note,
+            occurredAt: input.occurredAt,
           });
         },
       });
@@ -270,6 +277,7 @@ function AddTransactionSheetBody({
       reset({
         mode: 'expense',
         amount: '',
+        date: defaultTransactionDateString(),
         title: '',
         note: '',
         tags: '',
@@ -309,7 +317,7 @@ function AddTransactionSheetBody({
       >
         <View className='mb-4 flex-row items-center justify-between'>
           <AppText size='xl' weight='bold'>
-            Add
+            Quick Add
           </AppText>
           <IconButton name='close-outline' onPress={onClose} />
         </View>
@@ -343,34 +351,39 @@ function AddTransactionSheetBody({
               render={({ field: { value, onChange, ref } }) => (
                 <Field
                   ref={ref}
-                  label='Amount'
+                  label={`Amount · ${currency}`}
                   value={value}
                   onChangeText={onChange}
                   keyboardType='decimal-pad'
                   placeholder='0.00'
                   error={errors.amount?.message}
+                  style={{
+                    fontSize: fontSize(28),
+                    fontWeight: '600',
+                    fontVariant: ['tabular-nums'],
+                  }}
                 />
               )}
             />
           </View>
           <View
             onLayout={(e) =>
-              registerFieldOffset('title', e.nativeEvent.layout.y)
+              registerFieldOffset('date', e.nativeEvent.layout.y)
             }
           >
             <Controller
               control={control}
-              name='title'
+              name='date'
               render={({ field: { value, onChange, ref } }) => (
                 <Field
                   ref={ref}
-                  label='Title'
+                  label='Date'
                   value={value}
                   onChangeText={onChange}
-                  placeholder={
-                    mode === 'transfer' ? 'Transfer' : 'Coffee, AWS invoice…'
-                  }
-                  error={errors.title?.message}
+                  placeholder='YYYY-MM-DD'
+                  autoCapitalize='none'
+                  autoCorrect={false}
+                  error={errors.date?.message}
                 />
               )}
             />
@@ -457,6 +470,33 @@ function AddTransactionSheetBody({
             </>
           )}
 
+          <View
+            onLayout={(e) =>
+              registerFieldOffset('title', e.nativeEvent.layout.y)
+            }
+          >
+            <Controller
+              control={control}
+              name='title'
+              render={({ field: { value, onChange, ref } }) => (
+                <Field
+                  ref={ref}
+                  label={
+                    mode === 'transfer'
+                      ? 'Title (optional)'
+                      : 'Title (optional — defaults to category)'
+                  }
+                  value={value}
+                  onChangeText={onChange}
+                  placeholder={
+                    mode === 'transfer' ? 'Transfer' : 'Coffee, AWS invoice…'
+                  }
+                  error={errors.title?.message}
+                />
+              )}
+            />
+          </View>
+
           <Controller
             control={control}
             name='note'
@@ -512,17 +552,6 @@ function AddTransactionSheetBody({
                   />
                 </View>
               </View>
-              <Button
-                label='Scan receipt (OCR soon)'
-                variant='ghost'
-                icon='scan-outline'
-                onPress={() =>
-                  showToast(
-                    'On-device OCR is planned — attach a photo for now',
-                    'default'
-                  )
-                }
-              />
               {pendingImages.length ? (
                 <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                   <View className='flex-row gap-2'>
@@ -546,10 +575,6 @@ function AddTransactionSheetBody({
               )}
             </View>
           ) : null}
-
-          <AppText size='xs' muted>
-            Currency: {currency}
-          </AppText>
 
           {saveAvailability.disabled &&
           saveAvailability.reason === 'no_accounts' ? (

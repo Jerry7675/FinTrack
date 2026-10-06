@@ -1,3 +1,4 @@
+import { format } from 'date-fns';
 import { ZodError } from 'zod';
 import type { parseAmountToMinor } from '@/lib/money';
 import { TRANSACTION_LIMITS } from '@/lib/validation';
@@ -7,6 +8,7 @@ export type AddTransactionMode = 'expense' | 'income' | 'transfer';
 export type AddTransactionFormValues = {
   mode: AddTransactionMode;
   amount: string;
+  date: string;
   title: string;
   note?: string;
   tags?: string;
@@ -17,6 +19,7 @@ export type AddTransactionFormValues = {
 
 export type AddTransactionField =
   | 'amount'
+  | 'date'
   | 'title'
   | 'accountId'
   | 'toAccountId'
@@ -25,6 +28,7 @@ export type AddTransactionField =
 
 export const ADD_TRANSACTION_FIELD_ORDER: AddTransactionField[] = [
   'amount',
+  'date',
   'title',
   'accountId',
   'toAccountId',
@@ -42,9 +46,16 @@ export type AccountSummary = {
   name: string;
 };
 
+export type CategorySummary = {
+  id: string;
+  name: string;
+};
+
 export type SubmitAddTransactionDeps = {
   accounts: AccountSummary[];
+  categories: CategorySummary[];
   currency: string;
+  now?: Date;
   parseAmountToMinor: typeof parseAmountToMinor;
   createTransaction: (input: {
     accountId: string;
@@ -54,6 +65,7 @@ export type SubmitAddTransactionDeps = {
     currencyCode: string;
     title: string;
     note?: string;
+    occurredAt?: Date;
     tagNames?: string[];
   }) => Promise<string>;
   createTransfer: (input: {
@@ -64,12 +76,59 @@ export type SubmitAddTransactionDeps = {
     toCurrency: string;
     title: string;
     note?: string;
+    occurredAt?: Date;
   }) => Promise<void>;
 };
 
 export type SubmitAddTransactionResult =
   | { ok: true; transactionId?: string }
   | { ok: false; error: SubmitAddTransactionError };
+
+export function defaultTransactionDateString(now: Date = new Date()): string {
+  return format(now, 'yyyy-MM-dd');
+}
+
+export function parseIsoLocalDate(dateStr: string): Date | null {
+  const trimmed = dateStr.trim();
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmed);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const parsed = new Date(year, month - 1, day);
+  if (
+    parsed.getFullYear() !== year ||
+    parsed.getMonth() !== month - 1 ||
+    parsed.getDate() !== day
+  ) {
+    return null;
+  }
+  return parsed;
+}
+
+export function validateTransactionDate(
+  dateStr: string,
+  now: Date
+): SubmitAddTransactionError | { occurredAt: Date } {
+  const parsed = parseIsoLocalDate(dateStr);
+  if (!parsed) {
+    return {
+      type: 'field',
+      field: 'date',
+      message: 'Enter a valid date (YYYY-MM-DD)',
+    };
+  }
+  const today = defaultTransactionDateString(now);
+  const entered = defaultTransactionDateString(parsed);
+  if (entered > today) {
+    return {
+      type: 'field',
+      field: 'date',
+      message: 'Date cannot be in the future',
+    };
+  }
+  return { occurredAt: parsed };
+}
 
 export function resolveDefaultAccountId(
   accounts: AccountSummary[],
@@ -111,11 +170,23 @@ function parseTagNames(tags: string | undefined): string[] {
     .filter(Boolean);
 }
 
+export function resolveTransactionTitle(
+  values: AddTransactionFormValues,
+  categories: CategorySummary[]
+): string {
+  const trimmed = values.title.trim();
+  if (trimmed) return trimmed;
+  if (values.mode === 'transfer') return 'Transfer';
+  const category = categories.find((c) => c.id === values.categoryId);
+  return category?.name ?? '';
+}
+
 export function validateAddTransactionInput(
   values: AddTransactionFormValues,
   accounts: AccountSummary[],
-  currency: string,
-  parseAmount: typeof parseAmountToMinor
+  _currency: string,
+  parseAmount: typeof parseAmountToMinor,
+  now: Date = new Date()
 ): SubmitAddTransactionError | null {
   if (!values.accountId.trim()) {
     return {
@@ -133,13 +204,19 @@ export function validateAddTransactionInput(
     };
   }
 
-  const amountMinor = parseAmount(values.amount, currency);
+  const accountCurrency = account.currencyCode;
+  const amountMinor = parseAmount(values.amount, accountCurrency);
   if (amountMinor === null || amountMinor <= 0) {
     return {
       type: 'field',
       field: 'amount',
       message: 'Enter a valid amount',
     };
+  }
+
+  const dateResult = validateTransactionDate(values.date, now);
+  if ('type' in dateResult) {
+    return dateResult;
   }
 
   if (values.title.length > TRANSACTION_LIMITS.titleMax) {
@@ -164,14 +241,6 @@ export function validateAddTransactionInput(
       type: 'field',
       field: 'tags',
       message: `Each tag must be ${TRANSACTION_LIMITS.tagMax} characters or fewer`,
-    };
-  }
-
-  if (values.mode !== 'transfer' && !values.title.trim()) {
-    return {
-      type: 'field',
-      field: 'title',
-      message: 'Add a title',
     };
   }
 
@@ -231,16 +300,24 @@ export async function submitAddTransaction(
 ): Promise<SubmitAddTransactionResult> {
   const account = deps.accounts.find((a) => a.id === values.accountId);
   const currency = account?.currencyCode ?? deps.currency;
+  const now = deps.now ?? new Date();
 
   const validation = validateAddTransactionInput(
     values,
     deps.accounts,
     currency,
-    deps.parseAmountToMinor
+    deps.parseAmountToMinor,
+    now
   );
   if (validation) {
     return { ok: false, error: validation };
   }
+
+  const dateResult = validateTransactionDate(values.date, now);
+  if ('type' in dateResult) {
+    return { ok: false, error: dateResult };
+  }
+  const { occurredAt } = dateResult;
 
   const amountMinor = deps.parseAmountToMinor(values.amount, currency);
   if (amountMinor === null || amountMinor <= 0) {
@@ -250,6 +327,18 @@ export async function submitAddTransaction(
         type: 'field',
         field: 'amount',
         message: 'Enter a valid amount',
+      },
+    };
+  }
+
+  const title = resolveTransactionTitle(values, deps.categories);
+  if (values.mode !== 'transfer' && !title) {
+    return {
+      ok: false,
+      error: {
+        type: 'field',
+        field: 'title',
+        message: 'Select a category or add a title',
       },
     };
   }
@@ -276,6 +365,7 @@ export async function submitAddTransaction(
         toCurrency: to.currencyCode,
         title: values.title.trim() || 'Transfer',
         note: values.note,
+        occurredAt,
       });
       return { ok: true };
     }
@@ -286,8 +376,9 @@ export async function submitAddTransaction(
       type: values.mode,
       amountMinor,
       currencyCode: account?.currencyCode ?? currency,
-      title: values.title.trim(),
+      title,
       note: values.note,
+      occurredAt,
       tagNames: parseTagNames(values.tags),
     });
     return { ok: true, transactionId: txId };

@@ -5,7 +5,10 @@ import Database from 'better-sqlite3';
 import { eq } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 
-import { submitAddTransaction } from '@/features/transactions/submit-add-transaction';
+import {
+  defaultTransactionDateString,
+  submitAddTransaction,
+} from '@/features/transactions/submit-add-transaction';
 import type { AppDatabase } from '@/lib/db/client';
 import journal from '@/lib/db/migrations/meta/_journal.json';
 import { createTransaction } from '@/lib/db/queries';
@@ -105,6 +108,7 @@ describe('submitAddTransaction integration', () => {
       {
         mode: 'expense',
         amount: '15.50',
+        date: defaultTransactionDateString(FIXED_NOW),
         title: 'Coffee',
         note: 'morning',
         tags: '',
@@ -113,7 +117,9 @@ describe('submitAddTransaction integration', () => {
       },
       {
         accounts: accountSummary,
+        categories: [{ id: 'cat-exp', name: 'Food' }],
         currency: 'USD',
+        now: FIXED_NOW,
         parseAmountToMinor,
         createTransaction: (input) => createTransaction(db, input),
         createTransfer: async () => {
@@ -127,6 +133,7 @@ describe('submitAddTransaction integration', () => {
       {
         mode: 'income',
         amount: '1,000',
+        date: defaultTransactionDateString(FIXED_NOW),
         title: 'Paycheck',
         note: '',
         tags: 'work',
@@ -135,7 +142,9 @@ describe('submitAddTransaction integration', () => {
       },
       {
         accounts: accountSummary,
+        categories: [{ id: 'cat-inc', name: 'Salary' }],
         currency: 'USD',
+        now: FIXED_NOW,
         parseAmountToMinor,
         createTransaction: (input) => createTransaction(db, input),
         createTransfer: async () => {
