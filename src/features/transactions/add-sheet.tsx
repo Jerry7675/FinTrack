@@ -115,6 +115,7 @@ function AddTransactionSheetBody({
   const [pendingImages, setPendingImages] = useState<string[]>([]);
   const scrollRef = useRef<ScrollView>(null);
   const fieldOffsets = useRef<Partial<Record<AddTransactionField, number>>>({});
+  const wasVisibleRef = useRef(false);
 
   const {
     control,
@@ -152,12 +153,22 @@ function AddTransactionSheetBody({
   );
 
   useEffect(() => {
+    if (visible && !wasVisibleRef.current) {
+      setValue('date', defaultTransactionDateString());
+    }
+    wasVisibleRef.current = visible;
+  }, [visible, setValue]);
+
+  useEffect(() => {
     if (!visible || !ready) return;
-    setValue('date', defaultTransactionDateString());
     const nextId = resolveDefaultAccountId(accounts, settings?.activeAccountId);
     if (nextId) {
       setValue('accountId', nextId);
     }
+  }, [visible, ready, settings?.activeAccountId, accounts, setValue]);
+
+  useEffect(() => {
+    if (!visible || !ready) return;
     listCategories(
       db,
       mode === 'transfer' ? undefined : mode === 'income' ? 'income' : 'expense'
@@ -165,7 +176,7 @@ function AddTransactionSheetBody({
       setCategories(rows);
       setValue('categoryId', rows[0]?.id ?? null);
     });
-  }, [visible, ready, mode, settings?.activeAccountId, accounts, setValue]);
+  }, [visible, ready, mode, setValue]);
 
   const registerFieldOffset = useCallback(
     (field: AddTransactionField, y: number) => {
@@ -317,7 +328,7 @@ function AddTransactionSheetBody({
       >
         <View className='mb-4 flex-row items-center justify-between'>
           <AppText size='xl' weight='bold'>
-            Quick Add
+            Add
           </AppText>
           <IconButton name='close-outline' onPress={onClose} />
         </View>
