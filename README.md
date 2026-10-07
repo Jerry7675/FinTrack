@@ -20,6 +20,16 @@ bun install
 bun run start
 ```
 
+### Receipt scan (AI)
+
+Receipt scanning calls FinTrack's hosted scan API (not bundled in the repo). For local dev and EAS builds, set:
+
+```bash
+EXPO_PUBLIC_RECEIPT_SCAN_URL=https://fintrack-server-sandy.vercel.app/api/scan-receipt
+```
+
+Add the same variable in EAS project secrets / `eas.json` env for preview and production. **`expo-image-manipulator` and `expo-network` are native modules** — use a new EAS **preview** build (app version **1.1.0+**); Expo Go and OTA-only updates on older binaries are not supported for scan.
+
 Native modules (SQLite, widgets, biometrics) need a development build:
 
 ```bash

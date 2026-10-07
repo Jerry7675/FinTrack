@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useCallback } from 'react';
+import { type ReactNode, useCallback } from 'react';
 import { Pressable, View } from 'react-native';
 import { AppText, useThemeColors } from '@/components/ui/primitives';
 import { fontSize, scale, vs } from '@/lib/layout';
@@ -35,6 +35,8 @@ export function AmountDisplay({
   onPress,
   errorMessage,
   helperMessage,
+  aiFilledFromScan,
+  badge,
 }: {
   amountText: string;
   currencyCode: string;
@@ -42,6 +44,8 @@ export function AmountDisplay({
   onPress?: () => void;
   errorMessage?: string;
   helperMessage?: string;
+  aiFilledFromScan?: boolean;
+  badge?: ReactNode;
 }) {
   const c = useThemeColors();
   const display = formatKeypadDisplay(amountText, currencyCode, locale);
@@ -49,28 +53,35 @@ export function AmountDisplay({
   const label = amountText
     ? `Amount, ${display} ${currencyCode}`
     : `Amount, zero ${currencyCode}`;
+  const a11yLabel = aiFilledFromScan
+    ? `${label}, filled by AI from the receipt, check before saving`
+    : label;
 
   return (
     <View className='gap-1'>
-      <Pressable
-        onPress={onPress}
-        accessibilityRole='text'
-        accessibilityLabel={label}
-        accessibilityLiveRegion='polite'
-      >
-        <AppText
-          size='display'
-          weight='bold'
-          numeric
-          maxScale={1.2}
-          style={{
-            color: display ? c.ink : c.inkMuted,
-            fontVariant: ['tabular-nums'],
-          }}
+      <View className='flex-row items-start justify-between gap-2'>
+        <Pressable
+          onPress={onPress}
+          accessibilityRole='text'
+          accessibilityLabel={a11yLabel}
+          accessibilityLiveRegion='polite'
+          className='flex-1'
         >
-          {display || placeholder}
-        </AppText>
-      </Pressable>
+          <AppText
+            size='display'
+            weight='bold'
+            numeric
+            maxScale={1.2}
+            style={{
+              color: display ? c.ink : c.inkMuted,
+              fontVariant: ['tabular-nums'],
+            }}
+          >
+            {display || placeholder}
+          </AppText>
+        </Pressable>
+        {badge}
+      </View>
       {errorMessage || helperMessage ? (
         <AppText
           size='sm'

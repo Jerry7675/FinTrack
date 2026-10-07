@@ -1,5 +1,7 @@
 import * as FileSystem from 'expo-file-system/legacy';
+import * as ImageManipulator from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
+import { Image } from 'react-native';
 
 import { createId } from '@/lib/id';
 
@@ -73,4 +75,64 @@ export async function deleteLocalImage(path: string | null | undefined) {
   if (info.exists) {
     await FileSystem.deleteAsync(path, { idempotent: true });
   }
+}
+
+const MAX_UPLOAD_BASE64_BYTES = Math.floor(1.5 * 1024 * 1024);
+
+async function imageDimensions(
+  uri: string
+): Promise<{ width: number; height: number }> {
+  return new Promise((resolve, reject) => {
+    Image.getSize(uri, (width, height) => resolve({ width, height }), reject);
+  });
+}
+
+function base64ByteLength(base64: string): number {
+  const padding = base64.endsWith('==') ? 2 : base64.endsWith('=') ? 1 : 0;
+  return Math.floor((base64.length * 3) / 4) - padding;
+}
+
+async function encodeReceiptJpeg(
+  uri: string,
+  longEdge: number
+): Promise<{ uri: string; base64: string }> {
+  const { width, height } = await imageDimensions(uri);
+  const resize =
+    width >= height
+      ? { resize: { width: longEdge } }
+      : { resize: { height: longEdge } };
+  const result = await ImageManipulator.manipulateAsync(uri, [resize], {
+    compress: 0.7,
+    format: ImageManipulator.SaveFormat.JPEG,
+    base64: true,
+  });
+  if (!result.base64) {
+    throw new Error('Failed to encode receipt image');
+  }
+  return { uri: result.uri, base64: result.base64 };
+}
+
+/**
+ * Resize, strip EXIF (re-encode), and write a JPEG upload copy under cache.
+ */
+export async function prepareReceiptForUpload(
+  sourceUri: string
+): Promise<{ cachePath: string; base64: string }> {
+  const cacheDir = FileSystem.cacheDirectory ?? '';
+  if (!cacheDir) {
+    throw new Error('Cache directory unavailable');
+  }
+  let encoded = await encodeReceiptJpeg(sourceUri, 1600);
+  if (base64ByteLength(encoded.base64) > MAX_UPLOAD_BASE64_BYTES) {
+    await FileSystem.deleteAsync(encoded.uri, { idempotent: true });
+    encoded = await encodeReceiptJpeg(sourceUri, 1200);
+  }
+  const dest = `${cacheDir}fintrack-receipt-upload-${createId()}.jpg`;
+  await FileSystem.copyAsync({ from: encoded.uri, to: dest });
+  await FileSystem.deleteAsync(encoded.uri, { idempotent: true });
+  return { cachePath: dest, base64: encoded.base64 };
+}
+
+export async function deleteUploadCopy(path: string | null | undefined) {
+  await deleteLocalImage(path);
 }
