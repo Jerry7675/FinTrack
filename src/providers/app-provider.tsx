@@ -8,7 +8,7 @@ import {
   useMemo,
   useState,
 } from 'react';
-import { useColorScheme as useSystemScheme } from 'react-native';
+import { AppState, useColorScheme as useSystemScheme } from 'react-native';
 
 import { db } from '@/lib/db/client';
 import migrations from '@/lib/db/migrations/migrations';
@@ -86,6 +86,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setUnlocked(true);
     }
   }, [settings]);
+
+  useEffect(() => {
+    if (!settings?.lockEnabled) return;
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'background' || nextState === 'inactive') {
+        setUnlocked(false);
+      }
+    });
+    return () => subscription.remove();
+  }, [settings?.lockEnabled]);
 
   const colorScheme: 'light' | 'dark' = useMemo(() => {
     const pref = settings?.theme ?? 'system';

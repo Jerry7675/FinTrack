@@ -1,8 +1,6 @@
-import * as LocalAuthentication from 'expo-local-authentication';
 import { type Href, router } from 'expo-router';
-import * as SecureStore from 'expo-secure-store';
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, ScrollView, View } from 'react-native';
+import { Alert, ScrollView, TextInput, View } from 'react-native';
 
 import { ProfileAvatar } from '@/components/media/images';
 import {
@@ -39,6 +37,13 @@ import {
   updateSettings,
 } from '@/lib/db/queries';
 import { layout } from '@/lib/layout';
+import {
+  biometricsAvailable,
+  disableAppLock,
+  enableBiometricLock,
+  enablePinLock,
+  isValidPinFormat,
+} from '@/lib/lock';
 import { deleteLocalImage, persistImage, pickImage } from '@/lib/media';
 import { CURRENCIES } from '@/lib/money';
 import {
@@ -50,8 +55,6 @@ import {
 import { budgetStatus } from '@/lib/planning';
 import { useApp } from '@/providers/app-provider';
 
-const PIN_KEY = 'fintrack_pin';
-
 export function SettingsScreen() {
   const { settings, accounts, setTheme, setLockEnabled, refresh } = useApp();
   const { showToast } = useToast();
@@ -60,6 +63,7 @@ export function SettingsScreen() {
     mode: 'export' | 'import';
     pendingText?: string;
   } | null>(null);
+  const [pinSetup, setPinSetup] = useState('');
 
   const currencyOptions = useMemo(
     () =>
@@ -144,35 +148,40 @@ export function SettingsScreen() {
 
   const toggleLock = async () => {
     if (settings?.lockEnabled) {
+      await disableAppLock();
       await setLockEnabled(false);
-      await SecureStore.deleteItemAsync(PIN_KEY);
+      setPinSetup('');
       return;
     }
-    const hasHardware = await LocalAuthentication.hasHardwareAsync();
-    const enrolled = await LocalAuthentication.isEnrolledAsync();
-    if (hasHardware && enrolled) {
-      const result = await LocalAuthentication.authenticateAsync({
-        promptMessage: 'Enable FinTrack lock',
-      });
-      if (!result.success) return;
-      await SecureStore.setItemAsync(PIN_KEY, 'biometric');
-      await setLockEnabled(true);
+    if (await biometricsAvailable()) {
+      try {
+        await enableBiometricLock();
+        await setLockEnabled(true);
+      } catch {
+        showToast('Could not enable app lock', 'error');
+      }
       return;
     }
     Alert.alert(
-      'Biometrics unavailable',
-      'Lock will use a simple app gate. You can still enable it.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Enable',
-          onPress: async () => {
-            await SecureStore.setItemAsync(PIN_KEY, 'soft');
-            await setLockEnabled(true);
-          },
-        },
-      ]
+      'Set a PIN',
+      'Biometrics are not available. Choose a 4–8 digit PIN to lock FinTrack.',
+      [{ text: 'OK' }]
     );
+  };
+
+  const confirmPinLock = async () => {
+    if (!isValidPinFormat(pinSetup)) {
+      showToast('PIN must be 4–8 digits', 'error');
+      return;
+    }
+    try {
+      await enablePinLock(pinSetup);
+      await setLockEnabled(true);
+      setPinSetup('');
+      showToast('App lock enabled', 'success');
+    } catch {
+      showToast('Could not enable app lock', 'error');
+    }
   };
 
   const onChangeProfilePhoto = async () => {
@@ -409,7 +418,7 @@ export function SettingsScreen() {
           title='App lock'
           subtitle={
             settings?.lockEnabled
-              ? 'Enabled — unlock with biometrics'
+              ? 'Enabled — biometrics or PIN'
               : 'Require unlock on open'
           }
           onPress={toggleLock}
@@ -417,6 +426,29 @@ export function SettingsScreen() {
             <AppText muted>{settings?.lockEnabled ? 'On' : 'Off'}</AppText>
           }
         />
+        {!settings?.lockEnabled ? (
+          <View className='mt-3' style={{ gap: 8 }}>
+            <AppText size='sm' muted>
+              No biometrics? Set a PIN here, then turn on App lock.
+            </AppText>
+            <TextInput
+              value={pinSetup}
+              onChangeText={(v) =>
+                setPinSetup(v.replace(/\D/g, '').slice(0, 8))
+              }
+              keyboardType='number-pad'
+              secureTextEntry
+              placeholder='4–8 digit PIN'
+              className='rounded-2xl px-4 py-3.5 bg-surface-sunken'
+            />
+            <Button
+              label='Save PIN for app lock'
+              variant='secondary'
+              onPress={confirmPinLock}
+              disabled={!isValidPinFormat(pinSetup)}
+            />
+          </View>
+        ) : null}
 
         <SectionHeader title='Reminders' />
         <ListRow
