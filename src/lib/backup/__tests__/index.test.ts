@@ -5,7 +5,9 @@ import {
   type BackupPayload,
   decryptBackupPayload,
   ENC_PREFIX,
+  ENC_PREFIX_V3,
   encryptBackupPayload,
+  KDF_ROUNDS_V3,
   MIN_BACKUP_PASSWORD_LENGTH,
   parseTransactionsCsv,
 } from '@/lib/backup';
@@ -216,7 +218,7 @@ describe('encryptBackupPayload', () => {
     const password = 'test-password-123';
     const encrypted = await encryptBackupPayload(samplePayload, password);
 
-    expect(encrypted).toContain(ENC_PREFIX);
+    expect(encrypted.startsWith(`${ENC_PREFIX_V3}.`)).toBe(true);
     expect(encrypted.split('.')).toHaveLength(3);
   });
 
@@ -232,7 +234,7 @@ describe('encryptBackupPayload', () => {
     const digest = ExpoCrypto.digestStringAsync as jest.Mock;
     digest.mockClear();
     await encryptBackupPayload(samplePayload, 'test-password-123');
-    expect(digest).toHaveBeenCalledTimes(2000);
+    expect(digest).toHaveBeenCalledTimes(KDF_ROUNDS_V3);
   });
 
   it('encrypts and decrypts correctly', async () => {
@@ -346,7 +348,7 @@ describe('backup constants', () => {
   });
 
   it('has correct encryption prefix', () => {
-    expect(ENC_PREFIX).toBe('FTENC2');
+    expect(ENC_PREFIX).toBe('FTENC3');
   });
 
   it('has correct minimum password length', () => {

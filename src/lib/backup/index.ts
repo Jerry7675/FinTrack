@@ -1,13 +1,4 @@
 import { isNull } from 'drizzle-orm';
-import {
-  AESEncryptionKey,
-  AESSealedData,
-  aesDecryptAsync,
-  aesEncryptAsync,
-  CryptoDigestAlgorithm,
-  digestStringAsync,
-  getRandomBytesAsync,
-} from 'expo-crypto';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
@@ -32,10 +23,13 @@ import { MAX_MINOR, parseAmountToMinor } from '@/lib/money';
 
 import {
   BACKUP_SCHEMA_VERSION,
-  ENC_PREFIX,
+  ENC_PREFIX_V3,
+  isEncryptedBackupBlob,
+  KDF_ROUNDS_V3,
   LEGACY_ENC_PREFIX,
   MIN_BACKUP_PASSWORD_LENGTH,
 } from './constants';
+import { openBackupCiphertext, sealBackupPlaintext } from './crypto';
 import {
   applyBackupRestore,
   type RestoreBackupHooks,
@@ -48,6 +42,10 @@ import {
 export {
   BACKUP_SCHEMA_VERSION,
   ENC_PREFIX,
+  ENC_PREFIX_V2,
+  ENC_PREFIX_V3,
+  KDF_ROUNDS_V2,
+  KDF_ROUNDS_V3,
   MIN_BACKUP_PASSWORD_LENGTH,
 } from './constants';
 export {
@@ -131,30 +129,6 @@ export async function exportBackupJson(): Promise<string> {
   return path;
 }
 
-async function deriveKeyHex(
-  password: string,
-  saltHex: string
-): Promise<string> {
-  let material = `${password}:${saltHex}`;
-  for (let i = 0; i < 2000; i++) {
-    material = await digestStringAsync(CryptoDigestAlgorithm.SHA256, material);
-  }
-  return material;
-}
-
-function bytesToBase64(bytes: Uint8Array): string {
-  let binary = '';
-  for (const b of bytes) binary += String.fromCharCode(b);
-  return globalThis.btoa(binary);
-}
-
-function base64ToBytes(b64: string): Uint8Array {
-  const binary = globalThis.atob(b64);
-  const out = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
-  return out;
-}
-
 function utf8ToBytes(text: string): Uint8Array {
   return new TextEncoder().encode(text);
 }
@@ -167,16 +141,8 @@ export async function encryptBackupPayload(
   payload: BackupPayload,
   password: string
 ): Promise<string> {
-  const salt = await getRandomBytesAsync(16);
-  const saltHex = Array.from(salt)
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
-  const keyHex = await deriveKeyHex(password, saltHex);
-  const key = await AESEncryptionKey.import(keyHex, 'hex');
   const plaintext = utf8ToBytes(JSON.stringify(payload));
-  const sealed = await aesEncryptAsync(plaintext, key);
-  const combined = await sealed.combined();
-  return `${ENC_PREFIX}.${saltHex}.${bytesToBase64(combined)}`;
+  return sealBackupPlaintext(plaintext, password, ENC_PREFIX_V3, KDF_ROUNDS_V3);
 }
 
 export async function decryptBackupPayload(
@@ -189,18 +155,16 @@ export async function decryptBackupPayload(
       'This backup uses an outdated encryption format. Re-export from a newer FinTrack build.'
     );
   }
-  const parts = trimmed.split('.');
-  if (parts.length !== 3 || parts[0] !== ENC_PREFIX) {
-    throw new Error('Not an encrypted FinTrack backup');
-  }
-  const [, saltHex, cipherB64] = parts;
-  const keyHex = await deriveKeyHex(password, saltHex);
-  const key = await AESEncryptionKey.import(keyHex, 'hex');
-  const sealed = AESSealedData.fromCombined(base64ToBytes(cipherB64));
   let plaintext: Uint8Array;
   try {
-    plaintext = await aesDecryptAsync(sealed, key);
-  } catch {
+    plaintext = await openBackupCiphertext(trimmed, password);
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      error.message === 'Not an encrypted FinTrack backup'
+    ) {
+      throw error;
+    }
     throw new Error('Wrong password or corrupted backup');
   }
   const json = bytesToUtf8(plaintext);
@@ -263,7 +227,7 @@ export async function importBackupFromText(
 ): Promise<void> {
   const trimmed = text.trim();
   let payload: BackupPayload;
-  if (trimmed.startsWith(ENC_PREFIX) || trimmed.startsWith(LEGACY_ENC_PREFIX)) {
+  if (isEncryptedBackupBlob(trimmed)) {
     if (!password) throw new Error('Password required for encrypted backup');
     payload = await decryptBackupPayload(text, password);
   } else {
