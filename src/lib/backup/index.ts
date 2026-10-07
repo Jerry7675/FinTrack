@@ -12,7 +12,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 
-import { db } from '@/lib/db/client';
+import { type AppDatabase, db } from '@/lib/db/client';
 import { createTransaction } from '@/lib/db/queries';
 import {
   accountGroups,
@@ -30,31 +30,41 @@ import {
 } from '@/lib/db/schema';
 import { MAX_MINOR, parseAmountToMinor } from '@/lib/money';
 
-export const BACKUP_SCHEMA_VERSION = 1;
-export const ENC_PREFIX = 'FTENC2';
-const LEGACY_ENC_PREFIX = 'FTENC1';
-export const MIN_BACKUP_PASSWORD_LENGTH = 8;
+import {
+  BACKUP_SCHEMA_VERSION,
+  ENC_PREFIX,
+  LEGACY_ENC_PREFIX,
+  MIN_BACKUP_PASSWORD_LENGTH,
+} from './constants';
+import {
+  applyBackupRestore,
+  type RestoreBackupHooks,
+} from './restore-transaction';
+import {
+  type ValidatedBackupPayload,
+  validateBackupPayload,
+} from './validate-payload';
 
-export type BackupPayload = {
-  schemaVersion: number;
-  exportedAt: string;
-  data: {
-    accountGroups: (typeof accountGroups.$inferSelect)[];
-    accounts: (typeof accounts.$inferSelect)[];
-    categories: (typeof categories.$inferSelect)[];
-    tags: (typeof tags.$inferSelect)[];
-    transactions: (typeof transactions.$inferSelect)[];
-    transactionTags: (typeof transactionTags.$inferSelect)[];
-    budgets: (typeof budgets.$inferSelect)[];
-    recurringTemplates: (typeof recurringTemplates.$inferSelect)[];
-    goals: (typeof goals.$inferSelect)[];
-    subscriptions: (typeof subscriptions.$inferSelect)[];
-    debts: (typeof debts.$inferSelect)[];
-    settings: (typeof settings.$inferSelect)[];
-  };
+export {
+  BACKUP_SCHEMA_VERSION,
+  ENC_PREFIX,
+  MIN_BACKUP_PASSWORD_LENGTH,
+} from './constants';
+export {
+  BackupValidationError,
+  validateBackupPayload,
+} from './validate-payload';
+
+export type BackupPayload = ValidatedBackupPayload;
+
+export type RestoreBackupOptions = {
+  database?: AppDatabase;
+  hooks?: RestoreBackupHooks;
 };
 
-export async function buildBackupPayload(): Promise<BackupPayload> {
+export async function buildBackupPayload(
+  database: AppDatabase = db
+): Promise<BackupPayload> {
   const [
     groups,
     ledgers,
@@ -69,21 +79,21 @@ export async function buildBackupPayload(): Promise<BackupPayload> {
     debtRows,
     settingRows,
   ] = await Promise.all([
-    db.select().from(accountGroups),
-    db.select().from(accounts),
-    db.select().from(categories),
-    db.select().from(tags),
-    db.select().from(transactions),
-    db.select().from(transactionTags),
-    db.select().from(budgets),
-    db.select().from(recurringTemplates),
-    db.select().from(goals),
-    db.select().from(subscriptions),
-    db.select().from(debts),
-    db.select().from(settings),
+    database.select().from(accountGroups),
+    database.select().from(accounts),
+    database.select().from(categories),
+    database.select().from(tags),
+    database.select().from(transactions),
+    database.select().from(transactionTags),
+    database.select().from(budgets),
+    database.select().from(recurringTemplates),
+    database.select().from(goals),
+    database.select().from(subscriptions),
+    database.select().from(debts),
+    database.select().from(settings),
   ]);
 
-  return {
+  const payload = {
     schemaVersion: BACKUP_SCHEMA_VERSION,
     exportedAt: new Date().toISOString(),
     data: {
@@ -101,6 +111,8 @@ export async function buildBackupPayload(): Promise<BackupPayload> {
       settings: settingRows,
     },
   };
+
+  return validateBackupPayload(payload);
 }
 
 export async function exportBackupJson(): Promise<string> {
@@ -192,16 +204,25 @@ export async function decryptBackupPayload(
     throw new Error('Wrong password or corrupted backup');
   }
   const json = bytesToUtf8(plaintext);
-  let payload: BackupPayload;
+  let parsed: unknown;
   try {
-    payload = JSON.parse(json) as BackupPayload;
+    parsed = JSON.parse(json) as unknown;
   } catch {
     throw new Error('Wrong password or corrupted backup');
   }
-  if (payload.schemaVersion !== BACKUP_SCHEMA_VERSION) {
-    throw new Error(`Unsupported backup version: ${payload.schemaVersion}`);
+  if (
+    !parsed ||
+    typeof parsed !== 'object' ||
+    (parsed as { schemaVersion?: number }).schemaVersion !==
+      BACKUP_SCHEMA_VERSION
+  ) {
+    const version = (parsed as { schemaVersion?: number })?.schemaVersion;
+    if (typeof version === 'number') {
+      throw new Error(`Unsupported backup version: ${version}`);
+    }
+    throw new Error('Wrong password or corrupted backup');
   }
-  return payload;
+  return validateBackupPayload(parsed);
 }
 
 export async function exportEncryptedBackup(password: string): Promise<string> {
@@ -240,13 +261,19 @@ export async function importBackupFromText(
   text: string,
   password?: string
 ): Promise<void> {
-  let payload: BackupPayload;
   const trimmed = text.trim();
+  let payload: BackupPayload;
   if (trimmed.startsWith(ENC_PREFIX) || trimmed.startsWith(LEGACY_ENC_PREFIX)) {
     if (!password) throw new Error('Password required for encrypted backup');
     payload = await decryptBackupPayload(text, password);
   } else {
-    payload = JSON.parse(text) as BackupPayload;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(text) as unknown;
+    } catch {
+      throw new Error('Invalid backup file');
+    }
+    payload = validateBackupPayload(parsed);
   }
   await restoreBackupPayload(payload);
 }
@@ -447,46 +474,15 @@ export async function pickAndImportTransactionsCsv(input: {
   return { imported: preview.rows.length, skipped: preview.skipped };
 }
 
-export async function restoreBackupPayload(
-  payload: BackupPayload
-): Promise<void> {
-  if (payload.schemaVersion !== BACKUP_SCHEMA_VERSION) {
-    throw new Error(`Unsupported backup version: ${payload.schemaVersion}`);
-  }
-  await db.delete(transactionTags);
-  await db.delete(transactions);
-  await db.delete(budgets);
-  await db.delete(recurringTemplates);
-  await db.delete(goals);
-  await db.delete(subscriptions);
-  await db.delete(debts);
-  await db.delete(tags);
-  await db.delete(categories);
-  await db.delete(accounts);
-  await db.delete(accountGroups);
-  await db.delete(settings);
+export function restoreBackupPayload(
+  input: unknown,
+  options?: RestoreBackupOptions
+): void {
+  const payload = validateBackupPayload(input);
 
-  const d = payload.data;
-  if (d.accountGroups.length) {
-    await db.insert(accountGroups).values(d.accountGroups);
-  }
-  if (d.accounts.length) await db.insert(accounts).values(d.accounts);
-  if (d.categories.length) await db.insert(categories).values(d.categories);
-  if (d.tags.length) await db.insert(tags).values(d.tags);
-  if (d.transactions.length) {
-    await db.insert(transactions).values(d.transactions);
-  }
-  if (d.transactionTags.length) {
-    await db.insert(transactionTags).values(d.transactionTags);
-  }
-  if (d.budgets.length) await db.insert(budgets).values(d.budgets);
-  if (d.recurringTemplates.length) {
-    await db.insert(recurringTemplates).values(d.recurringTemplates);
-  }
-  if (d.goals.length) await db.insert(goals).values(d.goals);
-  if (d.subscriptions.length) {
-    await db.insert(subscriptions).values(d.subscriptions);
-  }
-  if (d.debts.length) await db.insert(debts).values(d.debts);
-  if (d.settings.length) await db.insert(settings).values(d.settings);
+  const database = options?.database ?? db;
+
+  database.transaction((tx) => {
+    applyBackupRestore(tx, payload.data, options?.hooks);
+  });
 }

@@ -309,7 +309,7 @@ describe('decryptBackupPayload', () => {
   });
 
   it('throws error for unsupported schema version', async () => {
-    const futurePayload: BackupPayload = {
+    const futurePayload = {
       schemaVersion: 999,
       exportedAt: new Date().toISOString(),
       data: {
@@ -329,7 +329,10 @@ describe('decryptBackupPayload', () => {
     };
 
     const password = 'test-password';
-    const encrypted = await encryptBackupPayload(futurePayload, password);
+    const encrypted = await encryptBackupPayload(
+      futurePayload as unknown as BackupPayload,
+      password
+    );
 
     await expect(decryptBackupPayload(encrypted, password)).rejects.toThrow(
       /version/i
