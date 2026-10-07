@@ -12,29 +12,19 @@ import {
   InvalidPinError,
   LockoutError,
 } from '@/lib/lock';
-import { readLockSecret } from '@/lib/lock/storage';
 import { useApp } from '@/providers/app-provider';
-
-function lockSecretNeedsPinSetup(
-  secret: Awaited<ReturnType<typeof readLockSecret>>
-): boolean {
-  return Boolean(
-    secret?.mode === 'pin' && (!secret.pinSalt || !secret.pinHash)
-  );
-}
 
 export function UnlockScreen() {
   const { setUnlocked } = useApp();
   const [error, setError] = useState('');
   const [pin, setPin] = useState('');
   const [mode, setMode] = useState<'biometric' | 'pin' | null>(null);
-  const [needsSetup, setNeedsSetup] = useState(false);
+  const [biometricsReady, setBiometricsReady] = useState(false);
   const [lockoutMs, setLockoutMs] = useState(0);
 
   const refreshState = useCallback(async () => {
-    const secret = await readLockSecret();
-    setNeedsSetup(lockSecretNeedsPinSetup(secret));
-    setMode((await getLockMode()) ?? 'biometric');
+    setMode((await getLockMode()) ?? 'pin');
+    setBiometricsReady(await biometricsAvailable());
     setLockoutMs(await getLockoutRemainingMs());
   }, []);
 
@@ -93,38 +83,11 @@ export function UnlockScreen() {
   };
 
   useEffect(() => {
-    if (needsSetup || mode !== 'biometric') return;
-    biometricsAvailable()
-      .then((available) => {
-        if (available) unlockWithBiometrics();
-      })
-      .catch(() => undefined);
-  }, [mode, needsSetup, unlockWithBiometrics]);
+    if (mode !== 'biometric' || !biometricsReady) return;
+    unlockWithBiometrics().catch(() => undefined);
+  }, [mode, biometricsReady, unlockWithBiometrics]);
 
-  if (needsSetup) {
-    return (
-      <Screen>
-        <View
-          className='flex-1 justify-center'
-          style={{ paddingHorizontal: layout.gutter }}
-        >
-          <AppText size='display' weight='bold'>
-            FinTrack
-          </AppText>
-          <AppText muted className='mt-2'>
-            App lock must be set up again in Settings (PIN required on this
-            device).
-          </AppText>
-          <View className='mt-8'>
-            <Button
-              label='Open Settings'
-              onPress={() => router.replace('/(tabs)/settings')}
-            />
-          </View>
-        </View>
-      </Screen>
-    );
-  }
+  const showBiometricButton = mode === 'biometric' && biometricsReady;
 
   return (
     <Screen>
@@ -149,35 +112,32 @@ export function UnlockScreen() {
           </AppText>
         ) : null}
 
-        {mode === 'pin' ? (
-          <View className='mt-6' style={{ gap: 12 }}>
-            <TextInput
-              value={pin}
-              onChangeText={(value) => {
-                setPin(value.replace(/\D/g, '').slice(0, 8));
-                setError('');
-              }}
-              keyboardType='number-pad'
-              secureTextEntry
-              placeholder='PIN'
-              maxLength={8}
-              className='rounded-2xl px-4 py-3.5 bg-surface-sunken'
-            />
+        <View className='mt-6' style={{ gap: 12 }}>
+          {showBiometricButton ? (
             <Button
-              label='Unlock with PIN'
-              onPress={unlockWithPin}
-              disabled={lockoutMs > 0 || pin.length < 4}
-            />
-          </View>
-        ) : (
-          <View className='mt-8'>
-            <Button
-              label='Unlock'
+              label='Unlock with biometrics'
               onPress={unlockWithBiometrics}
               disabled={lockoutMs > 0}
             />
-          </View>
-        )}
+          ) : null}
+          <TextInput
+            value={pin}
+            onChangeText={(value) => {
+              setPin(value.replace(/\D/g, '').slice(0, 8));
+              setError('');
+            }}
+            keyboardType='number-pad'
+            secureTextEntry
+            placeholder='PIN'
+            maxLength={8}
+            className='rounded-2xl px-4 py-3.5 bg-surface-sunken'
+          />
+          <Button
+            label='Unlock with PIN'
+            onPress={unlockWithPin}
+            disabled={lockoutMs > 0 || pin.length < 4}
+          />
+        </View>
       </View>
     </Screen>
   );

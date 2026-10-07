@@ -1,7 +1,7 @@
 export const BACKUP_SCHEMA_VERSION = 1;
 /** Pre-hardening encrypted backup format (SHA-256 × 2 000 KDF). */
 export const ENC_PREFIX_V2 = 'FTENC2';
-/** Current encrypted backup format (SHA-256 × 120 000 KDF). */
+/** Current encrypted backup format (iterated SHA-256 × 120 000, not PBKDF2). */
 export const ENC_PREFIX_V3 = 'FTENC3';
 /** Prefix used for newly exported encrypted backups. */
 export const ENC_PREFIX = ENC_PREFIX_V3;

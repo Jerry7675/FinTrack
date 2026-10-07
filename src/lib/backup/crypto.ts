@@ -45,6 +45,11 @@ export function kdfRoundsForPrefix(prefix: string): number {
   throw new Error('Unsupported encryption format');
 }
 
+/**
+ * Password-based key for backup encryption (not PBKDF2).
+ * Iterated SHA-256: each round replaces material with SHA-256(material).
+ * FTENC2 uses 2 000 rounds; FTENC3 uses 120 000. A future FTENC4 may adopt PBKDF2-HMAC-SHA256.
+ */
 export async function deriveBackupKeyHex(
   password: string,
   saltHex: string,

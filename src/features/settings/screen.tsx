@@ -22,6 +22,7 @@ import {
   exportEncryptedBackup,
   exportTransactionsCsv,
   importBackupFromText,
+  isEncryptedBackupBlob,
   MIN_BACKUP_PASSWORD_LENGTH,
   pickAndImportTransactionsCsv,
   pickAndReadBackupFile,
@@ -64,6 +65,7 @@ export function SettingsScreen() {
     pendingText?: string;
   } | null>(null);
   const [pinSetup, setPinSetup] = useState('');
+  const [passwordWorking, setPasswordWorking] = useState(false);
 
   const currencyOptions = useMemo(
     () =>
@@ -153,20 +155,22 @@ export function SettingsScreen() {
       setPinSetup('');
       return;
     }
-    if (await biometricsAvailable()) {
-      try {
-        await enableBiometricLock();
-        await setLockEnabled(true);
-      } catch {
-        showToast('Could not enable app lock', 'error');
-      }
+    if (!isValidPinFormat(pinSetup)) {
+      showToast('Set a 4–8 digit PIN below, then turn on App lock', 'error');
       return;
     }
-    Alert.alert(
-      'Set a PIN',
-      'Biometrics are not available. Choose a 4–8 digit PIN to lock FinTrack.',
-      [{ text: 'OK' }]
-    );
+    try {
+      if (await biometricsAvailable()) {
+        await enableBiometricLock(pinSetup);
+      } else {
+        await enablePinLock(pinSetup);
+      }
+      await setLockEnabled(true);
+      setPinSetup('');
+      showToast('App lock enabled', 'success');
+    } catch {
+      showToast('Could not enable app lock', 'error');
+    }
   };
 
   const confirmPinLock = async () => {
@@ -174,14 +178,7 @@ export function SettingsScreen() {
       showToast('PIN must be 4–8 digits', 'error');
       return;
     }
-    try {
-      await enablePinLock(pinSetup);
-      await setLockEnabled(true);
-      setPinSetup('');
-      showToast('App lock enabled', 'success');
-    } catch {
-      showToast('Could not enable app lock', 'error');
-    }
+    showToast('PIN saved — turn on App lock when ready', 'success');
   };
 
   const onChangeProfilePhoto = async () => {
@@ -282,10 +279,7 @@ export function SettingsScreen() {
     setBusy(true);
     try {
       const text = await pickAndReadBackupFile();
-      if (
-        text.trim().startsWith('FTENC2') ||
-        text.trim().startsWith('FTENC1')
-      ) {
+      if (isEncryptedBackupBlob(text)) {
         setPasswordPrompt({ mode: 'import', pendingText: text });
         return;
       }
@@ -317,47 +311,62 @@ export function SettingsScreen() {
     }
   };
 
-  const onPasswordConfirm = async (password: string) => {
+  const onPasswordConfirm = (password: string) => {
     const prompt = passwordPrompt;
-    setPasswordPrompt(null);
     if (!prompt) return;
-    setBusy(true);
-    try {
-      if (prompt.mode === 'export') {
-        await exportEncryptedBackup(password);
-        showToast('Encrypted backup exported', 'success');
-        return;
+    setPasswordWorking(true);
+    void (async () => {
+      try {
+        if (prompt.mode === 'export') {
+          await exportEncryptedBackup(password);
+          setPasswordPrompt(null);
+          showToast('Encrypted backup exported', 'success');
+          return;
+        }
+        await new Promise<void>((resolve, reject) => {
+          Alert.alert(
+            'Restore backup?',
+            'This replaces all FinTrack data on this device. Continue?',
+            [
+              {
+                text: 'Cancel',
+                style: 'cancel',
+                onPress: () => resolve(),
+              },
+              {
+                text: 'Restore',
+                style: 'destructive',
+                onPress: () => {
+                  void (async () => {
+                    try {
+                      await importBackupFromText(
+                        prompt.pendingText ?? '',
+                        password
+                      );
+                      await refresh();
+                      setPasswordPrompt(null);
+                      showToast('Backup restored', 'success');
+                      resolve();
+                    } catch (e) {
+                      reject(e);
+                    }
+                  })();
+                },
+              },
+            ]
+          );
+        });
+      } catch (e) {
+        showToast(
+          prompt.mode === 'export'
+            ? `Export failed: ${String(e)}`
+            : `Restore failed: ${String(e)}`,
+          'error'
+        );
+      } finally {
+        setPasswordWorking(false);
       }
-      Alert.alert(
-        'Restore backup?',
-        'This replaces all FinTrack data on this device. Continue?',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Restore',
-            style: 'destructive',
-            onPress: async () => {
-              try {
-                await importBackupFromText(prompt.pendingText ?? '', password);
-                await refresh();
-                showToast('Backup restored', 'success');
-              } catch (e) {
-                showToast(`Restore failed: ${String(e)}`, 'error');
-              }
-            },
-          },
-        ]
-      );
-    } catch (e) {
-      showToast(
-        prompt.mode === 'export'
-          ? `Export failed: ${String(e)}`
-          : `Restore failed: ${String(e)}`,
-        'error'
-      );
-    } finally {
-      setBusy(false);
-    }
+    })();
   };
 
   return (
@@ -573,10 +582,11 @@ export function SettingsScreen() {
         }
         confirmLabel={passwordPrompt?.mode === 'export' ? 'Export' : 'Continue'}
         minLength={MIN_BACKUP_PASSWORD_LENGTH}
-        onConfirm={(password) => {
-          void onPasswordConfirm(password);
+        working={passwordWorking}
+        onConfirm={onPasswordConfirm}
+        onCancel={() => {
+          if (!passwordWorking) setPasswordPrompt(null);
         }}
-        onCancel={() => setPasswordPrompt(null)}
       />
     </Screen>
   );

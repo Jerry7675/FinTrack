@@ -6,6 +6,8 @@ import {
   lockoutDelayMs,
   verifyPinAgainstRecord,
 } from './pin';
+import { runWithRelockSuppressed } from './relock';
+import { lockModeRequiresBiometricsFirst } from './secret';
 import {
   clearLockSecret,
   type LockMode,
@@ -22,6 +24,13 @@ export {
   MIN_PIN_LENGTH,
 } from './constants';
 export { isValidPinFormat, lockoutDelayMs } from './pin';
+export {
+  BACKGROUND_RELOCK_GRACE_MS,
+  isRelockSuppressed,
+  runWithRelockSuppressed,
+  shouldRelockAfterBackground,
+} from './relock';
+export { reconcileLockSecretStorage, runLegacyLockMigration } from './storage';
 export type { LockMode, LockSecretV1 };
 
 export class LockoutError extends Error {
@@ -50,34 +59,42 @@ export async function biometricsAvailable(): Promise<boolean> {
 export async function authenticateWithBiometrics(
   promptMessage: string
 ): Promise<boolean> {
-  const result = await LocalAuthentication.authenticateAsync({
-    promptMessage,
-    cancelLabel: 'Cancel',
-    disableDeviceFallback: false,
-    fallbackLabel: 'Use device passcode',
+  return runWithRelockSuppressed(async () => {
+    const result = await LocalAuthentication.authenticateAsync({
+      promptMessage,
+      cancelLabel: 'Cancel',
+      disableDeviceFallback: false,
+      fallbackLabel: 'Use device passcode',
+    });
+    return result.success;
   });
-  return result.success;
 }
 
-export async function enableBiometricLock(): Promise<void> {
+async function writePinSecret(mode: LockMode, pin: string): Promise<void> {
+  const { pinSalt, pinHash } = await createPinRecord(pin);
+  await writeLockSecret({
+    version: 1,
+    mode,
+    pinSalt,
+    pinHash,
+  });
+  await writeLockoutState({ failedAttempts: 0, lockedUntilMs: null });
+}
+
+export async function enableBiometricLock(pin: string): Promise<void> {
+  if (!isValidPinFormat(pin)) {
+    throw new Error('PIN must be 4–8 digits');
+  }
   const ok = await authenticateWithBiometrics('Enable FinTrack lock');
   if (!ok) throw new Error('Authentication cancelled');
-  await writeLockSecret({ version: 1, mode: 'biometric' });
-  await writeLockoutState({ failedAttempts: 0, lockedUntilMs: null });
+  await writePinSecret('biometric', pin);
 }
 
 export async function enablePinLock(pin: string): Promise<void> {
   if (!isValidPinFormat(pin)) {
     throw new Error('PIN must be 4–8 digits');
   }
-  const { pinSalt, pinHash } = await createPinRecord(pin);
-  await writeLockSecret({
-    version: 1,
-    mode: 'pin',
-    pinSalt,
-    pinHash,
-  });
-  await writeLockoutState({ failedAttempts: 0, lockedUntilMs: null });
+  await writePinSecret('pin', pin);
 }
 
 export async function disableAppLock(): Promise<void> {
@@ -99,17 +116,21 @@ export async function assertUnlocked(pin?: string): Promise<void> {
     throw new LockoutError(lockout.lockedUntilMs);
   }
 
-  if (secret.mode === 'biometric') {
+  const canTryBiometrics =
+    lockModeRequiresBiometricsFirst(secret.mode) &&
+    !pin &&
+    (await biometricsAvailable());
+
+  if (canTryBiometrics) {
     const ok = await authenticateWithBiometrics('Unlock FinTrack');
-    if (!ok) throw new Error('Authentication failed');
-    await writeLockoutState({ failedAttempts: 0, lockedUntilMs: null });
-    return;
+    if (ok) {
+      await writeLockoutState({ failedAttempts: 0, lockedUntilMs: null });
+      return;
+    }
+    throw new Error('Authentication failed');
   }
 
   if (!pin) throw new InvalidPinError();
-  if (!secret.pinSalt || !secret.pinHash) {
-    throw new Error('Lock is misconfigured');
-  }
   const valid = await verifyPinAgainstRecord(
     pin,
     secret.pinSalt,

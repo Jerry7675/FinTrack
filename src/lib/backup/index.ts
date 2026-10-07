@@ -19,6 +19,7 @@ import {
   transactions,
   transactionTags,
 } from '@/lib/db/schema';
+import { runWithRelockSuppressed } from '@/lib/lock';
 import { MAX_MINOR, parseAmountToMinor } from '@/lib/money';
 
 import {
@@ -44,6 +45,7 @@ export {
   ENC_PREFIX,
   ENC_PREFIX_V2,
   ENC_PREFIX_V3,
+  isEncryptedBackupBlob,
   KDF_ROUNDS_V2,
   KDF_ROUNDS_V3,
   MIN_BACKUP_PASSWORD_LENGTH,
@@ -211,14 +213,21 @@ export async function exportEncryptedBackup(password: string): Promise<string> {
 }
 
 export async function pickAndReadBackupFile(): Promise<string> {
-  const result = await DocumentPicker.getDocumentAsync({
-    type: ['application/json', 'text/plain', 'application/octet-stream', '*/*'],
-    copyToCacheDirectory: true,
+  return runWithRelockSuppressed(async () => {
+    const result = await DocumentPicker.getDocumentAsync({
+      type: [
+        'application/json',
+        'text/plain',
+        'application/octet-stream',
+        '*/*',
+      ],
+      copyToCacheDirectory: true,
+    });
+    if (result.canceled || !result.assets?.[0]?.uri) {
+      throw new Error('Cancelled');
+    }
+    return FileSystem.readAsStringAsync(result.assets[0].uri);
   });
-  if (result.canceled || !result.assets?.[0]?.uri) {
-    throw new Error('Cancelled');
-  }
-  return FileSystem.readAsStringAsync(result.assets[0].uri);
 }
 
 export async function importBackupFromText(

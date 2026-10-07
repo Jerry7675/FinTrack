@@ -8,13 +8,15 @@ import {
   useMemo,
   useState,
 } from 'react';
-import { AppState, useColorScheme as useSystemScheme } from 'react-native';
+import { useColorScheme as useSystemScheme } from 'react-native';
 
 import { db } from '@/lib/db/client';
 import migrations from '@/lib/db/migrations/migrations';
 import { listAccounts, listGroups, updateSettings } from '@/lib/db/queries';
 import type { Account, AccountGroup, Settings } from '@/lib/db/schema';
 import { ensureSeedData, getSettings } from '@/lib/db/seed';
+import { reconcileLockSecretStorage } from '@/lib/lock';
+import { useBackgroundRelock } from '@/lib/lock/use-background-relock';
 
 type ThemePreference = 'system' | 'light' | 'dark';
 
@@ -88,14 +90,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [settings]);
 
   useEffect(() => {
-    if (!settings?.lockEnabled) return;
-    const subscription = AppState.addEventListener('change', (nextState) => {
-      if (nextState === 'background' || nextState === 'inactive') {
-        setUnlocked(false);
-      }
-    });
-    return () => subscription.remove();
-  }, [settings?.lockEnabled]);
+    if (!success || !seeded || !settings) return;
+    let cancelled = false;
+    (async () => {
+      const { disableAppLock } = await reconcileLockSecretStorage(
+        settings.lockEnabled
+      );
+      if (cancelled || !disableAppLock) return;
+      await updateSettings(db, { lockEnabled: false });
+      setUnlocked(true);
+      await refresh();
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [success, seeded, settings, refresh]);
+
+  const lockEnabled = Boolean(settings?.lockEnabled);
+  useBackgroundRelock(lockEnabled, () => setUnlocked(false));
 
   const colorScheme: 'light' | 'dark' = useMemo(() => {
     const pref = settings?.theme ?? 'system';
