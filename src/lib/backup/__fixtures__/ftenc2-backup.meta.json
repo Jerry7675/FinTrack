@@ -1,0 +1,6 @@
+{
+  "password": "fixture-pass-12345",
+  "encPrefix": "FTENC2",
+  "kdfRounds": 2000,
+  "description": "Encrypted with pre-hardening FTENC2 (SHA-256 x2000 KDF, expo-compatible AES-GCM layout)"
+}

@@ -595,6 +595,7 @@ export function PasswordDialog({
   message,
   confirmLabel = 'Confirm',
   minLength = 8,
+  working = false,
   onConfirm,
   onCancel,
 }: {
@@ -603,6 +604,8 @@ export function PasswordDialog({
   message: string;
   confirmLabel?: string;
   minLength?: number;
+  /** Shown while backup key derivation / crypto runs (can take several seconds). */
+  working?: boolean;
   onConfirm: (password: string) => void;
   onCancel: () => void;
 }) {
@@ -667,12 +670,18 @@ export function PasswordDialog({
             secureTextEntry
             autoCapitalize='none'
             autoCorrect={false}
+            editable={!working}
             placeholder='Password'
             placeholderTextColor={c.inkMuted}
             className={`rounded-2xl px-4 py-3.5 ${bg}`}
             style={{ color: c.ink, fontSize: fontSize(15), minHeight: vs(48) }}
             onSubmitEditing={submit}
           />
+          {working ? (
+            <Text style={{ color: c.inkMuted, fontSize: fontSize(13) }}>
+              Deriving encryption key…
+            </Text>
+          ) : null}
           {error ? (
             <Text style={{ color: c.expense, fontSize: fontSize(13) }}>
               {error}
@@ -680,10 +689,19 @@ export function PasswordDialog({
           ) : null}
           <View className='mt-2 flex-row gap-3'>
             <View className='flex-1'>
-              <Button label='Cancel' variant='secondary' onPress={onCancel} />
+              <Button
+                label='Cancel'
+                variant='secondary'
+                onPress={onCancel}
+                disabled={working}
+              />
             </View>
             <View className='flex-1'>
-              <Button label={confirmLabel} onPress={submit} />
+              <Button
+                label={working ? 'Working…' : confirmLabel}
+                onPress={submit}
+                disabled={working}
+              />
             </View>
           </View>
         </View>

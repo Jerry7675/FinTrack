@@ -15,6 +15,8 @@ import migrations from '@/lib/db/migrations/migrations';
 import { listAccounts, listGroups, updateSettings } from '@/lib/db/queries';
 import type { Account, AccountGroup, Settings } from '@/lib/db/schema';
 import { ensureSeedData, getSettings } from '@/lib/db/seed';
+import { reconcileLockSecretStorage } from '@/lib/lock';
+import { useBackgroundRelock } from '@/lib/lock/use-background-relock';
 
 type ThemePreference = 'system' | 'light' | 'dark';
 
@@ -86,6 +88,26 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setUnlocked(true);
     }
   }, [settings]);
+
+  useEffect(() => {
+    if (!success || !seeded || !settings) return;
+    let cancelled = false;
+    (async () => {
+      const { disableAppLock } = await reconcileLockSecretStorage(
+        settings.lockEnabled
+      );
+      if (cancelled || !disableAppLock) return;
+      await updateSettings(db, { lockEnabled: false });
+      setUnlocked(true);
+      await refresh();
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [success, seeded, settings, refresh]);
+
+  const lockEnabled = Boolean(settings?.lockEnabled);
+  useBackgroundRelock(lockEnabled, () => setUnlocked(false));
 
   const colorScheme: 'light' | 'dark' = useMemo(() => {
     const pref = settings?.theme ?? 'system';

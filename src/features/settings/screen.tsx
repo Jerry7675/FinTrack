@@ -1,8 +1,6 @@
-import * as LocalAuthentication from 'expo-local-authentication';
 import { type Href, router } from 'expo-router';
-import * as SecureStore from 'expo-secure-store';
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, ScrollView, View } from 'react-native';
+import { Alert, ScrollView, TextInput, View } from 'react-native';
 
 import { ProfileAvatar } from '@/components/media/images';
 import {
@@ -24,6 +22,7 @@ import {
   exportEncryptedBackup,
   exportTransactionsCsv,
   importBackupFromText,
+  isEncryptedBackupBlob,
   MIN_BACKUP_PASSWORD_LENGTH,
   pickAndImportTransactionsCsv,
   pickAndReadBackupFile,
@@ -39,6 +38,13 @@ import {
   updateSettings,
 } from '@/lib/db/queries';
 import { layout } from '@/lib/layout';
+import {
+  biometricsAvailable,
+  disableAppLock,
+  enableBiometricLock,
+  enablePinLock,
+  isValidPinFormat,
+} from '@/lib/lock';
 import { deleteLocalImage, persistImage, pickImage } from '@/lib/media';
 import { CURRENCIES } from '@/lib/money';
 import {
@@ -50,8 +56,6 @@ import {
 import { budgetStatus } from '@/lib/planning';
 import { useApp } from '@/providers/app-provider';
 
-const PIN_KEY = 'fintrack_pin';
-
 export function SettingsScreen() {
   const { settings, accounts, setTheme, setLockEnabled, refresh } = useApp();
   const { showToast } = useToast();
@@ -60,6 +64,8 @@ export function SettingsScreen() {
     mode: 'export' | 'import';
     pendingText?: string;
   } | null>(null);
+  const [pinSetup, setPinSetup] = useState('');
+  const [passwordWorking, setPasswordWorking] = useState(false);
 
   const currencyOptions = useMemo(
     () =>
@@ -144,35 +150,35 @@ export function SettingsScreen() {
 
   const toggleLock = async () => {
     if (settings?.lockEnabled) {
+      await disableAppLock();
       await setLockEnabled(false);
-      await SecureStore.deleteItemAsync(PIN_KEY);
+      setPinSetup('');
       return;
     }
-    const hasHardware = await LocalAuthentication.hasHardwareAsync();
-    const enrolled = await LocalAuthentication.isEnrolledAsync();
-    if (hasHardware && enrolled) {
-      const result = await LocalAuthentication.authenticateAsync({
-        promptMessage: 'Enable FinTrack lock',
-      });
-      if (!result.success) return;
-      await SecureStore.setItemAsync(PIN_KEY, 'biometric');
+    if (!isValidPinFormat(pinSetup)) {
+      showToast('Set a 4–8 digit PIN below, then turn on App lock', 'error');
+      return;
+    }
+    try {
+      if (await biometricsAvailable()) {
+        await enableBiometricLock(pinSetup);
+      } else {
+        await enablePinLock(pinSetup);
+      }
       await setLockEnabled(true);
+      setPinSetup('');
+      showToast('App lock enabled', 'success');
+    } catch {
+      showToast('Could not enable app lock', 'error');
+    }
+  };
+
+  const confirmPinLock = async () => {
+    if (!isValidPinFormat(pinSetup)) {
+      showToast('PIN must be 4–8 digits', 'error');
       return;
     }
-    Alert.alert(
-      'Biometrics unavailable',
-      'Lock will use a simple app gate. You can still enable it.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Enable',
-          onPress: async () => {
-            await SecureStore.setItemAsync(PIN_KEY, 'soft');
-            await setLockEnabled(true);
-          },
-        },
-      ]
-    );
+    showToast('PIN saved — turn on App lock when ready', 'success');
   };
 
   const onChangeProfilePhoto = async () => {
@@ -273,10 +279,7 @@ export function SettingsScreen() {
     setBusy(true);
     try {
       const text = await pickAndReadBackupFile();
-      if (
-        text.trim().startsWith('FTENC2') ||
-        text.trim().startsWith('FTENC1')
-      ) {
+      if (isEncryptedBackupBlob(text)) {
         setPasswordPrompt({ mode: 'import', pendingText: text });
         return;
       }
@@ -308,47 +311,62 @@ export function SettingsScreen() {
     }
   };
 
-  const onPasswordConfirm = async (password: string) => {
+  const onPasswordConfirm = (password: string) => {
     const prompt = passwordPrompt;
-    setPasswordPrompt(null);
     if (!prompt) return;
-    setBusy(true);
-    try {
-      if (prompt.mode === 'export') {
-        await exportEncryptedBackup(password);
-        showToast('Encrypted backup exported', 'success');
-        return;
+    setPasswordWorking(true);
+    void (async () => {
+      try {
+        if (prompt.mode === 'export') {
+          await exportEncryptedBackup(password);
+          setPasswordPrompt(null);
+          showToast('Encrypted backup exported', 'success');
+          return;
+        }
+        await new Promise<void>((resolve, reject) => {
+          Alert.alert(
+            'Restore backup?',
+            'This replaces all FinTrack data on this device. Continue?',
+            [
+              {
+                text: 'Cancel',
+                style: 'cancel',
+                onPress: () => resolve(),
+              },
+              {
+                text: 'Restore',
+                style: 'destructive',
+                onPress: () => {
+                  void (async () => {
+                    try {
+                      await importBackupFromText(
+                        prompt.pendingText ?? '',
+                        password
+                      );
+                      await refresh();
+                      setPasswordPrompt(null);
+                      showToast('Backup restored', 'success');
+                      resolve();
+                    } catch (e) {
+                      reject(e);
+                    }
+                  })();
+                },
+              },
+            ]
+          );
+        });
+      } catch (e) {
+        showToast(
+          prompt.mode === 'export'
+            ? `Export failed: ${String(e)}`
+            : `Restore failed: ${String(e)}`,
+          'error'
+        );
+      } finally {
+        setPasswordWorking(false);
       }
-      Alert.alert(
-        'Restore backup?',
-        'This replaces all FinTrack data on this device. Continue?',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Restore',
-            style: 'destructive',
-            onPress: async () => {
-              try {
-                await importBackupFromText(prompt.pendingText ?? '', password);
-                await refresh();
-                showToast('Backup restored', 'success');
-              } catch (e) {
-                showToast(`Restore failed: ${String(e)}`, 'error');
-              }
-            },
-          },
-        ]
-      );
-    } catch (e) {
-      showToast(
-        prompt.mode === 'export'
-          ? `Export failed: ${String(e)}`
-          : `Restore failed: ${String(e)}`,
-        'error'
-      );
-    } finally {
-      setBusy(false);
-    }
+    })();
   };
 
   return (
@@ -409,7 +427,7 @@ export function SettingsScreen() {
           title='App lock'
           subtitle={
             settings?.lockEnabled
-              ? 'Enabled — unlock with biometrics'
+              ? 'Enabled — biometrics or PIN'
               : 'Require unlock on open'
           }
           onPress={toggleLock}
@@ -417,6 +435,29 @@ export function SettingsScreen() {
             <AppText muted>{settings?.lockEnabled ? 'On' : 'Off'}</AppText>
           }
         />
+        {!settings?.lockEnabled ? (
+          <View className='mt-3' style={{ gap: 8 }}>
+            <AppText size='sm' muted>
+              No biometrics? Set a PIN here, then turn on App lock.
+            </AppText>
+            <TextInput
+              value={pinSetup}
+              onChangeText={(v) =>
+                setPinSetup(v.replace(/\D/g, '').slice(0, 8))
+              }
+              keyboardType='number-pad'
+              secureTextEntry
+              placeholder='4–8 digit PIN'
+              className='rounded-2xl px-4 py-3.5 bg-surface-sunken'
+            />
+            <Button
+              label='Save PIN for app lock'
+              variant='secondary'
+              onPress={confirmPinLock}
+              disabled={!isValidPinFormat(pinSetup)}
+            />
+          </View>
+        ) : null}
 
         <SectionHeader title='Reminders' />
         <ListRow
@@ -541,10 +582,11 @@ export function SettingsScreen() {
         }
         confirmLabel={passwordPrompt?.mode === 'export' ? 'Export' : 'Continue'}
         minLength={MIN_BACKUP_PASSWORD_LENGTH}
-        onConfirm={(password) => {
-          void onPasswordConfirm(password);
+        working={passwordWorking}
+        onConfirm={onPasswordConfirm}
+        onCancel={() => {
+          if (!passwordWorking) setPasswordPrompt(null);
         }}
-        onCancel={() => setPasswordPrompt(null)}
       />
     </Screen>
   );
